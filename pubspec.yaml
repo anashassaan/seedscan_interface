@@ -12,6 +12,7 @@ dependencies:
   # UI & fonts
   google_fonts: ^5.0.0
   lucide_icons: ^0.257.0
+  icons_launcher: ^3.0.3
 
 
   # State management
@@ -35,4 +36,12 @@ flutter:
   uses-material-design: true
 assets:
     - assets/images
+
+icons_launcher:
+  image_path: "assets/images/logo.png"
+  platforms:
+    android:
+      enable: true
+    ios:
+      enable: true
 

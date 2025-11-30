@@ -1,123 +1,156 @@
-// lib/views/main/dashboard_view.dart
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../../controllers/auth_controller.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../controllers/scan_controller.dart';
 import '../common/plant_card.dart';
 
-class DashboardView extends StatelessWidget {
+class DashboardView extends StatefulWidget {
   const DashboardView({super.key});
 
   @override
+  State<DashboardView> createState() => _DashboardViewState();
+}
+
+class _DashboardViewState extends State<DashboardView> {
+  final ScanController scanController = ScanController();
+
+  @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthController>(context);
-    final cs = Theme.of(context).colorScheme;
-
-    // Sample stats and plants (mock)
-    final stats = [
-      {'title': 'Trees Planted', 'value': '12'},
-      {'title': 'Carbon Offset', 'value': '36 Kg'},
-      {'title': 'Wallet Points', 'value': '420'},
-    ];
-
-    final plants = [
-      {
-        'image':
-            'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=800&q=60',
-        'name': 'Moringa',
-        'id': '402',
-        'status': 'Healthy',
-        'last': DateTime.now().subtract(const Duration(days: 2)),
-      },
-      {
-        'image':
-            'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=800&q=60',
-        'name': 'Neem',
-        'id': '278',
-        'status': 'Needs Water',
-        'last': DateTime.now().subtract(const Duration(days: 4)),
-      },
-    ];
+    final plants = scanController.getMyPlants();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Welcome back, ${auth.userName}'),
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_none_rounded),
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 12),
+
+              /// HEADER
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    "Welcome back, Anas 👋",
+                    style: GoogleFonts.poppins(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primaryContainer
+                          .withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      Icons.notifications,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  )
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              /// STATS
+              SizedBox(
+                height: 120,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: [
+                    _buildStatCard(
+                      context,
+                      title: "Trees Planted",
+                      value: "12",
+                      icon: Icons.forest_rounded,
+                    ),
+                    _buildStatCard(
+                      context,
+                      title: "CO₂ Offset",
+                      value: "3.8kg",
+                      icon: Icons.eco_rounded,
+                    ),
+                    _buildStatCard(
+                      context,
+                      title: "Wallet Points",
+                      value: "420",
+                      icon: Icons.wallet_rounded,
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              Text(
+                "My Plants",
+                style: GoogleFonts.poppins(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              /// PLANTS LIST
+              Expanded(
+                child: ListView.builder(
+                  itemCount: plants.length,
+                  itemBuilder: (context, index) {
+                    return PlantCard(plant: plants[index]);
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCard(
+    BuildContext context, {
+    required String title,
+    required String value,
+    required IconData icon,
+  }) {
+    return Container(
+      width: 160,
+      margin: const EdgeInsets.only(right: 14),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 32, color: Theme.of(context).colorScheme.primary),
+          const SizedBox(height: 10),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            title,
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12),
-        child: Column(
-          children: [
-            SizedBox(
-              height: 110,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: stats.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  final s = stats[index];
-                  return Card(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Container(
-                      width: 180,
-                      padding: const EdgeInsets.all(14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            s['title']!,
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: cs.onSurface.withOpacity(0.7),
-                                ),
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            s['value']!,
-                            style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w800),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'My Plants',
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                itemCount: plants.length,
-                itemBuilder: (context, i) {
-                  final p = plants[i];
-                  return PlantCard(
-                    imageUrl: p['image'] as String,
-                    name: p['name'] as String,
-                    id: p['id'] as String,
-                    status: p['status'] as String,
-                    lastScanned: p['last'] as DateTime,
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
