@@ -1,6 +1,8 @@
 // lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'config/controllers/theme_controller.dart';
+import 'config/controllers/notification_controller.dart';
 import 'config/theme.dart';
 import 'config/controllers/auth_controller.dart';
 import 'config/controllers/scan_controller.dart';
@@ -23,12 +25,23 @@ class SeedScanApp extends StatelessWidget {
         ChangeNotifierProvider<AuthController>(create: (_) => AuthController()),
         ChangeNotifierProvider<ScanController>(create: (_) => ScanController()),
         ChangeNotifierProvider<ChatController>(create: (_) => ChatController()),
+        ChangeNotifierProvider<ThemeController>(
+            create: (_) => ThemeController()),
+        ChangeNotifierProvider<NotificationController>(
+            create: (_) => NotificationController()),
       ],
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: 'SeedScan',
-        theme: AppTheme.light(),
-        home: const EntryDecider(),
+      child: Consumer<ThemeController>(
+        builder: (context, themeController, _) {
+          return MaterialApp(
+            debugShowCheckedModeBanner: false,
+            title: 'SeedScan',
+            theme: AppTheme.light(),
+            darkTheme: AppTheme
+                .dark(), // Assuming AppTheme has a dark() method, if not I'll use standard dark
+            themeMode: themeController.themeMode,
+            home: const EntryDecider(),
+          );
+        },
       ),
     );
   }

@@ -15,7 +15,7 @@ class SignUpView extends StatefulWidget {
 class _SignUpViewState extends State<SignUpView> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _fullName = TextEditingController();
-  final TextEditingController _cms = TextEditingController();
+  final TextEditingController _username = TextEditingController();
   final TextEditingController _email = TextEditingController();
   final TextEditingController _password = TextEditingController();
   bool _loading = false;
@@ -23,7 +23,7 @@ class _SignUpViewState extends State<SignUpView> {
   @override
   void dispose() {
     _fullName.dispose();
-    _cms.dispose();
+    _username.dispose();
     _email.dispose();
     _password.dispose();
     super.dispose();
@@ -35,7 +35,7 @@ class _SignUpViewState extends State<SignUpView> {
     setState(() => _loading = true);
     final ok = await auth.signUp(
       fullName: _fullName.text.trim(),
-      cmsId: _cms.text.trim(),
+      username: _username.text.trim(),
       email: _email.text.trim(),
       password: _password.text,
     );
@@ -54,7 +54,10 @@ class _SignUpViewState extends State<SignUpView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final keyboardPadding = MediaQuery.of(context).viewInsets.bottom;
+
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         elevation: 0,
         backgroundColor: theme.colorScheme.surface,
@@ -63,7 +66,12 @@ class _SignUpViewState extends State<SignUpView> {
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 12),
+          padding: const EdgeInsets.only(
+            left: 18.0,
+            right: 18.0,
+            top: 12.0,
+            bottom: 12.0,
+          ),
           child: Form(
             key: _formKey,
             child: ListView(
@@ -77,7 +85,7 @@ class _SignUpViewState extends State<SignUpView> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Join SeedScan with your student details',
+                  'Join SeedScan with your details',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurface.withOpacity(0.7),
                   ),
@@ -94,13 +102,13 @@ class _SignUpViewState extends State<SignUpView> {
                 ),
                 const SizedBox(height: 12),
                 CustomTextField(
-                  controller: _cms,
-                  label: 'CMS ID',
-                  hint: 'CMS123456',
+                  controller: _username,
+                  label: 'Username',
+                  hint: 'user123',
                   validator: Provider.of<AuthController>(
                     context,
                     listen: false,
-                  ).validateCms,
+                  ).validateUsername,
                 ),
                 const SizedBox(height: 12),
                 CustomTextField(

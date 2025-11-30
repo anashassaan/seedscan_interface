@@ -1,5 +1,4 @@
 // lib/views/social/chat_screen.dart
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/chat_controller.dart';
@@ -72,7 +71,7 @@ class _ChatScreenState extends State<ChatScreen>
         bottom: TabBar(
           controller: _tabController,
           tabs: const [
-            Tab(text: 'Dr. Zakir'),
+            Tab(text: 'SeedScan AI'),
             Tab(text: 'Community'),
           ],
         ),
@@ -134,7 +133,9 @@ class _ChatScreenState extends State<ChatScreen>
                                 const SizedBox(height: 8),
                                 Text(
                                   _formatTime(msg.time),
-                                  style: Theme.of(context).textTheme.bodySmall
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
                                       ?.copyWith(
                                         color: cs.onSurface.withOpacity(0.5),
                                       ),
@@ -160,14 +161,16 @@ class _ChatScreenState extends State<ChatScreen>
                             CircleAvatar(
                               radius: 12,
                               child: Text(
-                                'Z',
-                                style: Theme.of(context).textTheme.bodySmall
+                                'AI',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
                                     ?.copyWith(fontWeight: FontWeight.w700),
                               ),
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'Dr. Zakir is typing...',
+                              'SeedScan AI is typing...',
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
                           ],
@@ -175,54 +178,56 @@ class _ChatScreenState extends State<ChatScreen>
                       ),
                     ),
                   // input area
-                  SafeArea(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      color: cs.surface,
-                      child: Row(
-                        children: [
-                          IconButton(
-                            onPressed: _sendImageFromCamera,
-                            icon: const Icon(Icons.camera_alt_outlined),
-                          ),
-                          IconButton(
-                            onPressed: _sendImageFromGallery,
-                            icon: const Icon(Icons.photo_library_outlined),
-                          ),
-                          Expanded(
-                            child: TextField(
-                              controller: _inputController,
-                              textInputAction: TextInputAction.send,
-                              onSubmitted: (_) => _sendText(),
-                              decoration: InputDecoration(
-                                hintText:
-                                    'Ask Dr. Zakir or send a plant photo...',
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 12,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
+                  Container(
+                    padding: EdgeInsets.only(
+                      left: 12,
+                      right: 12,
+                      top: 8,
+                      bottom: MediaQuery.of(context).viewInsets.bottom > 0
+                          ? MediaQuery.of(context).viewInsets.bottom + 8
+                          : MediaQuery.of(context).padding.bottom + 8,
+                    ),
+                    color: cs.surface,
+                    child: Row(
+                      children: [
+                        IconButton(
+                          onPressed: _sendImageFromCamera,
+                          icon: const Icon(Icons.camera_alt_outlined),
+                        ),
+                        IconButton(
+                          onPressed: _sendImageFromGallery,
+                          icon: const Icon(Icons.photo_library_outlined),
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: _inputController,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (_) => _sendText(),
+                            decoration: InputDecoration(
+                              hintText:
+                                  'Ask SeedScan AI or send a plant photo...',
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
                               ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: _sendText,
-                            style: ElevatedButton.styleFrom(
-                              shape: RoundedRectangleBorder(
+                              border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(16),
                               ),
                             ),
-                            child: const Icon(Icons.send_rounded),
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: _sendText,
+                          style: ElevatedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                          child: const Icon(Icons.send_rounded),
+                        ),
+                      ],
                     ),
                   ),
                 ],

@@ -1,104 +1,226 @@
-// lib/views/home/home_view.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:badges/badges.dart' as badges;
 import '../../controllers/auth_controller.dart';
+import '../../controllers/notification_controller.dart';
+import '../notifications/notifications_view.dart';
 
 class HomeView extends StatelessWidget {
-  const HomeView({super.key});
+  final Function(int) onNavigate;
+
+  const HomeView({super.key, required this.onNavigate});
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthController>(context);
     final cs = Theme.of(context).colorScheme;
+    final auth = Provider.of<AuthController>(context);
+    final notificationController = Provider.of<NotificationController>(context);
 
     return Scaffold(
-      appBar: AppBar(title: Text('Welcome, ${auth.userName}'), elevation: 0),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Stack(
         children: [
-          // Stats Section
-          Row(
-            children: [
-              Expanded(
-                child: _statCard('Plants', '42', Icons.eco_outlined, cs),
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Hello,',
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              color: cs.onSurface.withOpacity(0.6),
+                            ),
+                          ),
+                          Text(
+                            auth.userName,
+                            style: GoogleFonts.poppins(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: cs.onSurface,
+                            ),
+                          ),
+                        ],
+                      ),
+                      CircleAvatar(
+                        radius: 24,
+                        backgroundImage: auth.profileImage != null
+                            ? FileImage(File(auth.profileImage!))
+                            : const NetworkImage(
+                                'https://randomuser.me/api/portraits/men/45.jpg',
+                              ) as ImageProvider,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Stats Cards
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _statCard(
+                          'Plants',
+                          '42',
+                          Icons.eco_outlined,
+                          cs,
+                          Colors.green.shade50,
+                          Colors.green.shade700,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _statCard(
+                          'Wallet Points',
+                          '1250',
+                          Icons.account_balance_wallet_outlined,
+                          cs,
+                          Colors.amber.shade50,
+                          Colors.amber.shade800,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _statCard(
+                          'Tasks',
+                          '5 Due',
+                          Icons.event_available,
+                          cs,
+                          Colors.blue.shade50,
+                          Colors.blue.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+
+                  // Quick Actions
+                  Text(
+                    'Quick Actions',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _quickAction(
+                        context,
+                        Icons.add_circle_outline,
+                        'Add Plant',
+                        2, // Scan tab
+                      ),
+                      _quickAction(
+                        context,
+                        Icons.document_scanner_outlined,
+                        'Diagnosis',
+                        2, // Scan tab
+                      ),
+                      _quickAction(
+                        context,
+                        Icons.chat_bubble_outline,
+                        'Chat',
+                        3, // Chat tab
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+
+                  // My Plants Preview
+                  Text(
+                    'My Plants',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  _plantsPreview(),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _statCard('Scans', '128', Icons.qr_code_scanner, cs),
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _statCard(
-                  'Health %',
-                  '87%',
-                  Icons.health_and_safety,
-                  cs,
+          // Floating Notification Button
+          Positioned(
+            right: 20,
+            top: 20,
+            child: SafeArea(
+              child: FloatingActionButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NotificationsView(),
+                    ),
+                  );
+                },
+                backgroundColor: cs.primaryContainer,
+                child: badges.Badge(
+                  showBadge: notificationController.unreadCount > 0,
+                  badgeContent: Text(
+                    '${notificationController.unreadCount}',
+                    style: const TextStyle(color: Colors.white, fontSize: 10),
+                  ),
+                  child: Icon(Icons.notifications_outlined,
+                      color: cs.onPrimaryContainer),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _statCard('Tasks', '5 Due', Icons.event_available, cs),
-              ),
-            ],
+            ),
           ),
-
-          const SizedBox(height: 24),
-          Text('Quick Actions', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-
-          // Quick Buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _quickAction(context, Icons.qr_code, 'Scan QR', 0),
-              _quickAction(
-                context,
-                Icons.document_scanner_outlined,
-                'Diagnosis',
-                1,
-              ),
-              _quickAction(context, Icons.chat_bubble_outline, 'Chat', 3),
-            ],
-          ),
-
-          const SizedBox(height: 24),
-          Text('Your Plants', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
-
-          _plantsPreview(),
         ],
       ),
     );
   }
 
-  Widget _statCard(String title, String value, IconData icon, ColorScheme cs) {
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(icon, size: 34, color: cs.primary),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(title),
-              ],
+  Widget _statCard(
+    String title,
+    String value,
+    IconData icon,
+    ColorScheme cs,
+    Color bgColor,
+    Color iconColor,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: iconColor, size: 28),
+          const SizedBox(width: 12),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: iconColor,
             ),
-          ],
-        ),
+          ),
+          Text(
+            title,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: iconColor.withOpacity(0.8),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -110,10 +232,7 @@ class HomeView extends StatelessWidget {
     int tabIndex,
   ) {
     return InkWell(
-      onTap: () {
-        // Switch tab in MainNavigation
-        DefaultTabController.of(context)?.animateTo(tabIndex);
-      },
+      onTap: () => onNavigate(tabIndex),
       borderRadius: BorderRadius.circular(20),
       child: Column(
         children: [

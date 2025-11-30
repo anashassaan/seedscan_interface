@@ -7,11 +7,14 @@ class AuthController extends ChangeNotifier {
   // Simple in-memory user model for demo
   String? _name;
   String? _email;
-  String? _cmsId;
+  String? _username;
+  String? _profileImagePath;
   bool _loggedIn = false;
 
   bool get isLoggedIn => _loggedIn;
   String get userName => _name ?? 'Student';
+  String get userHandle => _username ?? 'user123';
+  String? get profileImage => _profileImagePath;
 
   // Validation helpers
   String? validateName(String? v) {
@@ -20,8 +23,9 @@ class AuthController extends ChangeNotifier {
     return null;
   }
 
-  String? validateCms(String? v) {
-    if (v == null || v.trim().isEmpty) return 'CMS ID required';
+  String? validateUsername(String? v) {
+    if (v == null || v.trim().isEmpty) return 'Username required';
+    if (v.length < 3) return 'Min 3 chars';
     return null;
   }
 
@@ -45,6 +49,7 @@ class AuthController extends ChangeNotifier {
     }
     _email = email;
     _name ??= email.split('@').first;
+    _username ??= email.split('@').first;
     _loggedIn = true;
     notifyListeners();
     return true;
@@ -52,31 +57,40 @@ class AuthController extends ChangeNotifier {
 
   Future<bool> signUp({
     required String fullName,
-    required String cmsId,
+    required String username,
     required String email,
     required String password,
   }) async {
     // Mock sign-up with minimal checks
     await Future<void>.delayed(const Duration(milliseconds: 950));
     if (validateName(fullName) != null ||
-        validateCms(cmsId) != null ||
+        validateUsername(username) != null ||
         validateEmail(email) != null ||
         validatePassword(password) != null) {
       return false;
     }
     _name = fullName;
-    _cmsId = cmsId;
+    _username = username;
     _email = email;
     _loggedIn = true;
     notifyListeners();
     return true;
   }
 
+  void updateProfile({required String name, String? imagePath}) {
+    _name = name;
+    if (imagePath != null) {
+      _profileImagePath = imagePath;
+    }
+    notifyListeners();
+  }
+
   void signOut() {
     _loggedIn = false;
     _name = null;
     _email = null;
-    _cmsId = null;
+    _username = null;
+    _profileImagePath = null;
     notifyListeners();
   }
 }

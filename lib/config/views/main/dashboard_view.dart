@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../../controllers/scan_controller.dart';
+import '../../controllers/auth_controller.dart';
 import '../common/plant_card.dart';
 
 class DashboardView extends StatefulWidget {
@@ -16,6 +18,8 @@ class _DashboardViewState extends State<DashboardView> {
   @override
   Widget build(BuildContext context) {
     final plants = scanController.getMyPlants();
+    final auth = Provider.of<AuthController>(context);
+    final userName = auth.userName;
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -32,11 +36,11 @@ class _DashboardViewState extends State<DashboardView> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    "Welcome back, Anas 👋",
+                    "Hi, $userName 👋",
                     style: GoogleFonts.poppins(
                       fontSize: 22,
                       fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.primary,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   Container(
@@ -56,6 +60,16 @@ class _DashboardViewState extends State<DashboardView> {
                 ],
               ),
 
+              const SizedBox(height: 8),
+              Text(
+                "Let's check on your plants.",
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  color:
+                      Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+
               const SizedBox(height: 20),
 
               /// STATS
@@ -69,18 +83,27 @@ class _DashboardViewState extends State<DashboardView> {
                       title: "Trees Planted",
                       value: "12",
                       icon: Icons.forest_rounded,
+                      backgroundColor: Colors.green.shade50,
+                      iconColor: Colors.green.shade700,
+                      textColor: Colors.green.shade900,
                     ),
                     _buildStatCard(
                       context,
-                      title: "CO₂ Offset",
-                      value: "3.8kg",
+                      title: "Carbon Offset",
+                      value: "45.2kg",
                       icon: Icons.eco_rounded,
+                      backgroundColor: Colors.blue.shade50,
+                      iconColor: Colors.blue.shade700,
+                      textColor: Colors.blue.shade900,
                     ),
                     _buildStatCard(
                       context,
                       title: "Wallet Points",
-                      value: "420",
+                      value: "1250",
                       icon: Icons.wallet_rounded,
+                      backgroundColor: Colors.amber.shade50,
+                      iconColor: Colors.amber.shade700,
+                      textColor: Colors.amber.shade900,
                     ),
                   ],
                 ),
@@ -103,7 +126,15 @@ class _DashboardViewState extends State<DashboardView> {
                 child: ListView.builder(
                   itemCount: plants.length,
                   itemBuilder: (context, index) {
-                    return PlantCard(plant: plants[index]);
+                    final plant = plants[index];
+                    return PlantCard(
+                      imageUrl: plant.image,
+                      name: plant.name,
+                      scientificName: plant.scientificName,
+                      id: plant.id,
+                      status: plant.status,
+                      lastScanned: plant.lastScan,
+                    );
                   },
                 ),
               ),
@@ -119,35 +150,39 @@ class _DashboardViewState extends State<DashboardView> {
     required String title,
     required String value,
     required IconData icon,
+    required Color backgroundColor,
+    required Color iconColor,
+    required Color textColor,
   }) {
     return Container(
       width: 160,
       margin: const EdgeInsets.only(right: 14),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.primaryContainer.withOpacity(0.3),
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+          color: iconColor.withOpacity(0.2),
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 32, color: Theme.of(context).colorScheme.primary),
+          Icon(icon, size: 32, color: iconColor),
           const SizedBox(height: 10),
           Text(
             value,
             style: GoogleFonts.poppins(
               fontSize: 22,
               fontWeight: FontWeight.bold,
+              color: textColor,
             ),
           ),
           Text(
             title,
             style: GoogleFonts.poppins(
               fontSize: 13,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: textColor.withOpacity(0.7),
             ),
           ),
         ],

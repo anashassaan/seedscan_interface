@@ -12,7 +12,6 @@ class ScanView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scan = Provider.of<ScanController>(context);
-    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
