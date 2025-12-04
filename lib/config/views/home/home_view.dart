@@ -3,9 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:badges/badges.dart' as badges;
+
 import '../../controllers/auth_controller.dart';
 import '../../controllers/notification_controller.dart';
 import '../notifications/notifications_view.dart';
+
+// REAL SCREENS
+import '../home/my_plants_screen.dart';
+import '../home/wallet_screen.dart';
+import '../home/tasks_screen.dart';
 
 class HomeView extends StatelessWidget {
   final Function(int) onNavigate;
@@ -16,7 +22,8 @@ class HomeView extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final auth = Provider.of<AuthController>(context);
-    final notificationController = Provider.of<NotificationController>(context);
+    final notificationController =
+    Provider.of<NotificationController>(context);
 
     return Scaffold(
       body: Stack(
@@ -56,11 +63,12 @@ class HomeView extends StatelessWidget {
                         backgroundImage: auth.profileImage != null
                             ? FileImage(File(auth.profileImage!))
                             : const NetworkImage(
-                                'https://randomuser.me/api/portraits/men/45.jpg',
-                              ) as ImageProvider,
+                          'https://randomuser.me/api/portraits/men/45.jpg',
+                        ) as ImageProvider,
                       ),
                     ],
                   ),
+
                   const SizedBox(height: 24),
 
                   // Stats Cards
@@ -74,6 +82,15 @@ class HomeView extends StatelessWidget {
                           cs,
                           Colors.green.shade50,
                           Colors.green.shade700,
+                              () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                const MyPlantsScreen(),
+                              ),
+                            );
+                          },
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -85,11 +102,22 @@ class HomeView extends StatelessWidget {
                           cs,
                           Colors.amber.shade50,
                           Colors.amber.shade800,
+                              () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                const WalletScreen(),
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ],
                   ),
+
                   const SizedBox(height: 16),
+
                   Row(
                     children: [
                       Expanded(
@@ -100,10 +128,20 @@ class HomeView extends StatelessWidget {
                           cs,
                           Colors.blue.shade50,
                           Colors.blue.shade700,
+                              () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                const TasksScreen(),
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ],
                   ),
+
                   const SizedBox(height: 32),
 
                   // Quick Actions
@@ -115,32 +153,22 @@ class HomeView extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
+
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _quickAction(
-                        context,
-                        Icons.add_circle_outline,
-                        'Add Plant',
-                        2, // Scan tab
-                      ),
-                      _quickAction(
-                        context,
-                        Icons.document_scanner_outlined,
-                        'Diagnosis',
-                        2, // Scan tab
-                      ),
-                      _quickAction(
-                        context,
-                        Icons.chat_bubble_outline,
-                        'Chat',
-                        3, // Chat tab
-                      ),
+                          context, Icons.add_circle_outline, 'Add Plant', 2),
+                      _quickAction(context, Icons.document_scanner_outlined,
+                          'Diagnosis', 2),
+                      _quickAction(context, Icons.chat_bubble_outline,
+                          'Chat', 3),
                     ],
                   ),
+
                   const SizedBox(height: 32),
 
-                  // My Plants Preview
+                  // My Plants
                   Text(
                     'My Plants',
                     style: GoogleFonts.poppins(
@@ -154,7 +182,8 @@ class HomeView extends StatelessWidget {
               ),
             ),
           ),
-          // Floating Notification Button
+
+          // Notification Floating Button
           Positioned(
             right: 20,
             top: 20,
@@ -173,7 +202,8 @@ class HomeView extends StatelessWidget {
                   showBadge: notificationController.unreadCount > 0,
                   badgeContent: Text(
                     '${notificationController.unreadCount}',
-                    style: const TextStyle(color: Colors.white, fontSize: 10),
+                    style: const TextStyle(
+                        color: Colors.white, fontSize: 10),
                   ),
                   child: Icon(Icons.notifications_outlined,
                       color: cs.onPrimaryContainer),
@@ -186,53 +216,55 @@ class HomeView extends StatelessWidget {
     );
   }
 
+  // Stat Card
   Widget _statCard(
-    String title,
-    String value,
-    IconData icon,
-    ColorScheme cs,
-    Color bgColor,
-    Color iconColor,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: iconColor, size: 28),
-          const SizedBox(width: 12),
-          Text(
-            value,
-            style: GoogleFonts.poppins(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: iconColor,
+      String title,
+      String value,
+      IconData icon,
+      ColorScheme cs,
+      Color bgColor,
+      Color iconColor,
+      VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: iconColor, size: 28),
+            const SizedBox(height: 12),
+            Text(
+              value,
+              style: GoogleFonts.poppins(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: iconColor,
+              ),
             ),
-          ),
-          Text(
-            title,
-            style: GoogleFonts.poppins(
-              fontSize: 14,
-              color: iconColor.withOpacity(0.8),
+            Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: iconColor.withOpacity(0.8),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
+  // Quick Action Button
   Widget _quickAction(
-    BuildContext context,
-    IconData icon,
-    String label,
-    int tabIndex,
-  ) {
+      BuildContext context, IconData icon, String label, int index) {
     return InkWell(
-      onTap: () => onNavigate(tabIndex),
+      onTap: () => onNavigate(index),
       borderRadius: BorderRadius.circular(20),
       child: Column(
         children: [
@@ -244,6 +276,7 @@ class HomeView extends StatelessWidget {
     );
   }
 
+  // Plants Preview
   Widget _plantsPreview() {
     return SizedBox(
       height: 160,
@@ -270,30 +303,29 @@ class HomeView extends StatelessWidget {
     );
   }
 
+  // Plant card
   Widget _plantBox(String name, String status, String img) {
     return Container(
       width: 140,
       margin: const EdgeInsets.only(right: 16),
       child: Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
         clipBehavior: Clip.antiAlias,
         child: Column(
           children: [
             Expanded(
-              child: Image.network(
-                img,
-                fit: BoxFit.cover,
-                width: double.infinity,
-              ),
+              child: Image.network(img,
+                  width: double.infinity, fit: BoxFit.cover),
             ),
             Padding(
               padding: const EdgeInsets.all(8),
               child: Column(
                 children: [
-                  Text(
-                    name,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                  ),
+                  Text(name,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600)),
                   Text(status, style: const TextStyle(fontSize: 12)),
                 ],
               ),
