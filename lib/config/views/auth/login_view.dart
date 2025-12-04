@@ -82,8 +82,8 @@ class _LoginViewState extends State<LoginView> {
                             const SizedBox(height: 8),
                             Image.asset(
                               AppAssets.logo,
-                              height: 72,
-                              width: 72,
+                              height: MediaQuery.of(context).size.width * 0.65,
+                              width: MediaQuery.of(context).size.width * 0.65,
                               fit: BoxFit.contain,
                             ),
                             const SizedBox(height: 12),

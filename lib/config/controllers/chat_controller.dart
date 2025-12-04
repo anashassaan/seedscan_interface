@@ -23,12 +23,12 @@ class ChatMessage {
 
 class ChatController extends ChangeNotifier {
   ChatController() {
-    // welcome message from Dr. Zakir (AI)
+    // welcome message from SeedScan (AI)
     _messages.add(
       ChatMessage(
         id: 'ai-1',
         text:
-            'Hello! I am Dr. Zakir — your plant assistant. Send a photo or ask anything about plant care or diseases.',
+            'Hello! I am SeedScan Ai — your plant assistant. Send a photo or ask anything about plant care or diseases.',
         sender: Sender.ai,
       ),
     );

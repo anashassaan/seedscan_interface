@@ -1,9 +1,12 @@
+// lib/config/views/dashboard/dashboard_view.dart
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/scan_controller.dart';
 import '../../controllers/auth_controller.dart';
 import '../common/plant_card.dart';
+// 1. IMPORT SCAN SCREEN
+import '../scan/scan_screen.dart';
 
 class DashboardView extends StatefulWidget {
   const DashboardView({super.key});
@@ -13,6 +16,8 @@ class DashboardView extends StatefulWidget {
 }
 
 class _DashboardViewState extends State<DashboardView> {
+  // NOTE: You are creating a new ScanController instance here,
+  // ensure this is correct if your provider setup expects it differently.
   final ScanController scanController = ScanController();
 
   @override
@@ -23,6 +28,22 @@ class _DashboardViewState extends State<DashboardView> {
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.surface,
+      // 2. ADD FLOATING ACTION BUTTON
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          // Navigate to the ScanScreen
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const ScanScreen()),
+          );
+        },
+        label: const Text('New Scan'),
+        icon: const Icon(Icons.qr_code_scanner_rounded),
+        // Optional styling for better visibility/theming
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+      ),
+      // ------------------------------------
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
