@@ -3,6 +3,9 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/scan_controller.dart';
 import '../../controllers/chat_controller.dart';
+import '../../controllers/community_controller.dart';
+import '../../controllers/auth_controller.dart';
+import '../../../models/community_model.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
@@ -18,7 +21,15 @@ class UnifiedScanScreen extends StatefulWidget {
 
 class _UnifiedScanScreenState extends State<UnifiedScanScreen>
     with TickerProviderStateMixin {
-  final diagnosisService = LeafDiagnosisService();
+  // Enhanced service with optimized parameters for reliable detection
+  final diagnosisService = LeafDiagnosisService(
+    detectionThreshold: 0.25, // Balanced threshold (25%)
+    fallbackDetectionThreshold: 0.15, // Lower fallback for challenging images
+    enablePreprocessing: true, // Gamma correction + color enhancement
+    interpreterThreads: 4, // Multi-threading for faster inference
+    minBoxAreaFraction: 0.002, // Allow smaller leaf detections
+    maxBoxAreaFraction: 0.95, // Allow larger detections
+  );
 
   // State variables - PRESERVED for backend integration
   String? classificationResult;
@@ -178,9 +189,22 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
       if (mounted) {
         setState(() {
           classificationResult = result['result'];
-          diseaseName = result['disease'];
-          confidenceLevel = result['confidence'];
-          severityLevel = result['severity'];
+
+          // If the pipeline determined this is NOT an apple leaf,
+          // make sure we do NOT display disease/severity info.
+          final bool noApple = (result['result'] == 'No Apple Leaf Detected') ||
+              (result['disease'] == 'N/A');
+
+          if (noApple) {
+            diseaseName = 'N/A';
+            confidenceLevel = 0.0;
+            severityLevel = null; // null prevents severity UI from showing
+          } else {
+            diseaseName = result['disease'];
+            confidenceLevel = result['confidence'];
+            severityLevel = result['severity'];
+          }
+
           isLoading = false;
         });
       }
@@ -282,9 +306,20 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
       if (mounted) {
         setState(() {
           classificationResult = result['result'];
-          diseaseName = result['disease'];
-          confidenceLevel = result['confidence'];
-          severityLevel = result['severity'];
+
+          final bool noApple = (result['result'] == 'No Apple Leaf Detected') ||
+              (result['disease'] == 'N/A');
+
+          if (noApple) {
+            diseaseName = 'N/A';
+            confidenceLevel = 0.0;
+            severityLevel = null;
+          } else {
+            diseaseName = result['disease'];
+            confidenceLevel = result['confidence'];
+            severityLevel = result['severity'];
+          }
+
           isLoading = false;
         });
       }
@@ -328,14 +363,20 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: Container(
-          margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.3),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: BackButton(color: Colors.white),
-        ),
+        automaticallyImplyLeading: false,
+        leading: Navigator.canPop(context)
+            ? Container(
+                margin: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              )
+            : null,
         title: Text(
           scan.isQrMode ? 'QR Scanner' : 'Disease Detector',
           style: const TextStyle(
@@ -389,21 +430,237 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
   Widget _buildQRCameraView(ScanController scan) {
     return MobileScanner(
       controller: scan.cameraController,
-      onDetect: (capture) {
+      onDetect: (capture) async {
         final List<Barcode> barcodes = capture.barcodes;
         for (final barcode in barcodes) {
           if (barcode.rawValue != null) {
-            scan.handleQr(barcode.rawValue!);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('QR Code: ${barcode.rawValue}'),
-                duration: const Duration(seconds: 2),
-                behavior: SnackBarBehavior.floating,
-              ),
-            );
+            final result = await scan.handleQr(barcode.rawValue!);
+            if (result['success'] == true && mounted) {
+              _handleQrCodeScanned(barcode.rawValue!, result);
+            }
           }
         }
       },
+    );
+  }
+
+  // Handle QR code and check if it belongs to a community
+  void _handleQrCodeScanned(String qrCode, Map<String, dynamic> scanResult) {
+    final communityController =
+        Provider.of<CommunityController>(context, listen: false);
+    final community = communityController.getCommunityByQrCode(qrCode);
+
+    if (community != null) {
+      // QR code belongs to a community
+      _showAddToCommunityDialog(community, qrCode, scanResult);
+    } else {
+      // Regular QR code - show standard notification
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('QR Code: $qrCode'),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  // Show dialog to add plant to community
+  void _showAddToCommunityDialog(
+    Community community,
+    String qrCode,
+    Map<String, dynamic> scanResult,
+  ) {
+    final cs = Theme.of(context).colorScheme;
+    final TextEditingController nameController = TextEditingController();
+    final TextEditingController scientificNameController =
+        TextEditingController();
+    final TextEditingController descriptionController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Add Plant to Community'),
+            const SizedBox(height: 4),
+            Text(
+              community.name,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: cs.primary,
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'QR Code: $qrCode',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: cs.onSurface.withOpacity(0.6),
+                  fontFamily: 'monospace',
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Plant Name',
+                  hintText: 'e.g., Apple Tree',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: scientificNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Scientific Name',
+                  hintText: 'e.g., Malus domestica',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description',
+                  hintText: 'Brief description of the plant',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 12),
+              if (scanResult['latitude'] != null &&
+                  scanResult['longitude'] != null)
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cs.primaryContainer.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.location_on, size: 16, color: cs.primary),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Location Captured',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: cs.onPrimaryContainer,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Lat: ${scanResult['latitude']?.toStringAsFixed(6)}\n'
+                        'Long: ${scanResult['longitude']?.toStringAsFixed(6)}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontFamily: 'monospace',
+                          color: cs.onPrimaryContainer.withOpacity(0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (nameController.text.isNotEmpty) {
+                _addPlantToCommunity(
+                  community,
+                  qrCode,
+                  nameController.text,
+                  scientificNameController.text,
+                  descriptionController.text,
+                  scanResult,
+                );
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Add to Community'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Add plant to community
+  void _addPlantToCommunity(
+    Community community,
+    String qrCode,
+    String name,
+    String scientificName,
+    String description,
+    Map<String, dynamic> scanResult,
+  ) {
+    final communityController =
+        Provider.of<CommunityController>(context, listen: false);
+    final authController = Provider.of<AuthController>(context, listen: false);
+
+    // Create plant model
+    final plant = CommunityPlant(
+      id: qrCode,
+      communityId: community.id,
+      plantName: name,
+      scientificName:
+          scientificName.isNotEmpty ? scientificName : 'Unknown species',
+      plantedBy: authController.userEmail ?? authController.userHandle,
+      plantedByUsername: authController.userName,
+      plantedByAvatar: authController.profileImage,
+      location:
+          'Lat: ${scanResult['latitude']?.toStringAsFixed(4)}, Long: ${scanResult['longitude']?.toStringAsFixed(4)}',
+      imageUrl:
+          'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=800',
+      likeCount: 0,
+      commentCount: 0,
+      category: 'Community Plant',
+      description: description.isNotEmpty ? description : 'Added via QR scan',
+      plantedDate: DateTime.now(),
+      status: 'Healthy',
+      latitude: scanResult['latitude'],
+      longitude: scanResult['longitude'],
+      isLiked: false,
+      tags: [],
+    );
+
+    // Add to community
+    communityController.addPlantToCommunity(plant);
+
+    // Show success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Plant added to ${community.name}'),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(
+          label: 'View',
+          textColor: Colors.white,
+          onPressed: () {
+            // Navigate to community plants view
+            Navigator.pushNamed(context, '/community/${community.id}');
+          },
+        ),
+      ),
     );
   }
 
@@ -632,10 +889,8 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
       return _buildLoadingState(cs);
     }
 
-    return Positioned(
-      bottom: 0,
-      left: 0,
-      right: 0,
+    return Align(
+      alignment: Alignment.bottomCenter,
       child: Container(
         margin: const EdgeInsets.all(16),
         padding: const EdgeInsets.all(24),

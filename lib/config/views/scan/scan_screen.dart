@@ -336,8 +336,15 @@ class _ScanScreenState extends State<ScanScreen>
       AnimationController(vsync: this, duration: const Duration(seconds: 2))
         ..repeat(reverse: true);
 
-  // Diagnosis service instance
-  final diagnosisService = LeafDiagnosisService();
+  // Enhanced service with optimized parameters for reliable detection
+  final diagnosisService = LeafDiagnosisService(
+    detectionThreshold: 0.25, // Balanced threshold (25%)
+    fallbackDetectionThreshold: 0.15, // Lower fallback for challenging images
+    enablePreprocessing: true, // Gamma correction + color enhancement
+    interpreterThreads: 4, // Multi-threading for faster inference
+    minBoxAreaFraction: 0.002, // Allow smaller leaf detections
+    maxBoxAreaFraction: 0.95, // Allow larger detections
+  );
 
   // State variables for results
   String? classificationResult;
@@ -545,10 +552,19 @@ class _ScanScreenState extends State<ScanScreen>
     // Convert to File
     final imageFile = File(pickedFile.path);
 
-    // 1️⃣ First check apple / non-apple
-    final isApple = await diagnosisService.isAppleLeaf(imageFile);
+    // Run prediction which handles both apple detection and disease classification
+    final result = await diagnosisService.predict(imageFile);
 
-    if (!isApple) {
+    if (result.containsKey('error')) {
+      setState(() {
+        classificationResult = "Error: ${result['error']}";
+        diseaseName = null;
+        severityLevel = null;
+        confidenceLevel = null;
+        isLoading = false;
+      });
+      if (mounted) Navigator.of(context).pop();
+    } else if (result['result'] == 'No Apple Leaf Detected') {
       setState(() {
         classificationResult = "Non-Apple Leaf";
         diseaseName = null;
@@ -556,11 +572,8 @@ class _ScanScreenState extends State<ScanScreen>
         confidenceLevel = null;
         isLoading = false;
       });
-      if (mounted) Navigator.of(context).pop(); // close the progress sheet
+      if (mounted) Navigator.of(context).pop();
     } else {
-      // 2️⃣ Run disease classifier
-      final result = await diagnosisService.diagnoseDisease(imageFile);
-
       setState(() {
         classificationResult = "Apple Leaf Detected";
         diseaseName = result["disease"];
@@ -568,7 +581,7 @@ class _ScanScreenState extends State<ScanScreen>
         confidenceLevel = result["confidence"];
         isLoading = false;
       });
-      if (mounted) Navigator.of(context).pop(); // close the progress sheet
+      if (mounted) Navigator.of(context).pop();
     }
 
     // Show premium result sheet

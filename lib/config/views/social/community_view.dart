@@ -1,123 +1,297 @@
 // lib/views/social/community_view.dart
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+import '../../controllers/community_controller.dart';
+import '../../../models/community_model.dart';
+import 'community_plants_view.dart';
+import 'package:intl/intl.dart';
 
 class CommunityView extends StatelessWidget {
   const CommunityView({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final posts = _mockPosts();
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
-      body: ListView.separated(
-        padding: const EdgeInsets.all(12),
-        itemCount: posts.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (context, i) {
-          final p = posts[i];
-          return Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+      body: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) {
+          return [
+            SliverAppBar(
+              expandedHeight: 140,
+              floating: false,
+              pinned: true,
+              backgroundColor: cs.primary,
+              foregroundColor: cs.onPrimary,
+              flexibleSpace: FlexibleSpaceBar(
+                titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
+                title: Text(
+                  'Communities',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 28,
+                    color: cs.onPrimary,
+                  ),
+                ),
+                background: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        cs.primary,
+                        cs.primaryContainer,
+                      ],
+                    ),
+                  ),
+                  child: Stack(
                     children: [
-                      CircleAvatar(
-                        backgroundImage: NetworkImage(p['avatar'] as String),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              p['user'] as String,
-                              style: Theme.of(context).textTheme.titleSmall
-                                  ?.copyWith(fontWeight: FontWeight.w700),
-                            ),
-                            Text(
-                              p['time'] as String,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurface.withOpacity(0.6),
-                                  ),
-                            ),
-                          ],
+                      Positioned(
+                        right: -30,
+                        top: -30,
+                        child: Icon(
+                          LucideIcons.users,
+                          size: 150,
+                          color: cs.onPrimary.withOpacity(0.1),
                         ),
-                      ),
-                      IconButton(
-                        onPressed: () {},
-                        icon: const Icon(Icons.more_horiz),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      p['image'] as String,
-                      fit: BoxFit.cover,
+                ),
+              ),
+            ),
+          ];
+        },
+        body: Consumer<CommunityController>(
+          builder: (context, controller, _) {
+            final communities = controller.getCommunities();
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: communities.length,
+              itemBuilder: (context, index) {
+                final community = communities[index];
+                return _CommunityCard(community: community);
+              },
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+// Community Card
+class _CommunityCard extends StatelessWidget {
+  final Community community;
+
+  const _CommunityCard({required this.community});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => CommunityPlantsView(community: community),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image Section
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: community.imageUrl != null
+                      ? Image.network(
+                          community.imageUrl!,
+                          height: 160,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              height: 160,
+                              color: cs.surfaceVariant,
+                              child: Icon(
+                                LucideIcons.image,
+                                size: 64,
+                                color: cs.onSurfaceVariant,
+                              ),
+                            );
+                          },
+                        )
+                      : Container(
+                          height: 160,
+                          color: cs.surfaceVariant,
+                          child: Icon(
+                            LucideIcons.users,
+                            size: 64,
+                            color: cs.onSurfaceVariant,
+                          ),
+                        ),
+                ),
+                // Gradient Overlay
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(16)),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.5),
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Text(
-                    p['caption'] as String,
-                    style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                // Category Badge
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: cs.primary.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _getCategoryIcon(community.category),
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          community.category,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 10),
+                ),
+              ],
+            ),
+
+            // Content Section
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Community Name
+                  Text(
+                    community.name,
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: cs.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    community.description,
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: cs.onSurface.withOpacity(0.7),
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Stats Row
                   Row(
                     children: [
-                      IconButton(
-                        onPressed: () {},
-                        icon: const Icon(Icons.thumb_up_off_alt),
+                      Icon(
+                        LucideIcons.users,
+                        size: 16,
+                        color: cs.primary,
                       ),
-                      Text('${p['likes']}'),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${_formatNumber(community.memberCount)} members',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: cs.onSurface.withOpacity(0.7),
+                        ),
+                      ),
                       const SizedBox(width: 16),
-                      IconButton(
-                        onPressed: () {},
-                        icon: const Icon(Icons.comment_outlined),
+                      Icon(
+                        LucideIcons.leaf,
+                        size: 16,
+                        color: cs.primary,
                       ),
-                      Text('${p['comments']}'),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${_formatNumber(community.plantCount)} plants',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: cs.onSurface.withOpacity(0.7),
+                        ),
+                      ),
                       const Spacer(),
-                      TextButton(onPressed: () {}, child: const Text('View')),
+                      Icon(
+                        LucideIcons.chevronRight,
+                        size: 20,
+                        color: cs.onSurface.withOpacity(0.5),
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }
 
-  List<Map<String, Object>> _mockPosts() {
-    return [
-      {
-        'avatar': 'https://randomuser.me/api/portraits/women/72.jpg',
-        'user': 'Aisha R.',
-        'time': '2 hrs',
-        'image':
-            'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=1200&q=60',
-        'caption': 'My neem sapling is growing! Tips for soil nutrients?',
-        'likes': 12,
-        'comments': 4,
-      },
-      {
-        'avatar': 'https://randomuser.me/api/portraits/men/33.jpg',
-        'user': 'Hamza K.',
-        'time': '1 day',
-        'image':
-            'https://images.unsplash.com/photo-1470770903676-69b98201ea1c?auto=format&fit=crop&w=1200&q=60',
-        'caption': 'Found these spots on my mango leaf, any advice?',
-        'likes': 30,
-        'comments': 9,
-      },
-    ];
+  IconData _getCategoryIcon(String category) {
+    switch (category.toLowerCase()) {
+      case 'education':
+      case 'learning':
+        return LucideIcons.graduationCap;
+      case 'university':
+        return LucideIcons.school;
+      case 'official':
+        return LucideIcons.megaphone;
+      case 'urban':
+        return LucideIcons.building;
+      default:
+        return LucideIcons.tag;
+    }
+  }
+
+  String _formatNumber(int number) {
+    if (number >= 1000) {
+      return '${(number / 1000).toStringAsFixed(1)}k';
+    }
+    return number.toString();
   }
 }

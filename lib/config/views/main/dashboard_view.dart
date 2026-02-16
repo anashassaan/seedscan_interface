@@ -30,6 +30,7 @@ class _DashboardViewState extends State<DashboardView> {
       backgroundColor: Theme.of(context).colorScheme.surface,
       // 2. ADD FLOATING ACTION BUTTON
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'dashboard_fab',
         onPressed: () {
           // Navigate to the ScanScreen
           Navigator.push(

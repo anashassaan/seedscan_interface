@@ -1,10 +1,19 @@
 // lib/views/profile/profile_view.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/theme_controller.dart';
+import '../../controllers/scan_controller.dart';
+import '../../controllers/notification_controller.dart';
+import '../../controllers/wallet_controller.dart';
+import '../../controllers/community_controller.dart';
+import '../notifications/notifications_view.dart';
+import 'account_settings_screen.dart';
+import 'user_guidelines_screen.dart';
 
 class ProfileView extends StatefulWidget {
   const ProfileView({super.key});
@@ -15,6 +24,7 @@ class ProfileView extends StatefulWidget {
 
 class _ProfileViewState extends State<ProfileView> {
   late TextEditingController _nameController;
+  late TextEditingController _bioController;
   bool _isEditing = false;
   final ImagePicker _picker = ImagePicker();
 
@@ -23,11 +33,15 @@ class _ProfileViewState extends State<ProfileView> {
     super.initState();
     final auth = Provider.of<AuthController>(context, listen: false);
     _nameController = TextEditingController(text: auth.userName);
+    _bioController = TextEditingController(
+      text: 'Plant enthusiast 🌱 | Nature lover 🌿 | Making the world greener',
+    );
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _bioController.dispose();
     super.dispose();
   }
 
@@ -42,26 +56,57 @@ class _ProfileViewState extends State<ProfileView> {
   void _showImagePickerOptions() {
     showModalBottomSheet(
       context: context,
-      builder: (context) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('Gallery'),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.gallery);
-              },
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                ListTile(
+                  leading:
+                      const Icon(LucideIcons.image, color: Color(0xFF0B6E4F)),
+                  title: Text(
+                    'Choose from Gallery',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(ImageSource.gallery);
+                  },
+                ),
+                ListTile(
+                  leading:
+                      const Icon(LucideIcons.camera, color: Color(0xFF0B6E4F)),
+                  title: Text(
+                    'Take Photo',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _pickImage(ImageSource.camera);
+                  },
+                ),
+              ],
             ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: const Text('Camera'),
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.camera);
-              },
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -70,7 +115,6 @@ class _ProfileViewState extends State<ProfileView> {
   void _toggleEdit() {
     setState(() {
       if (_isEditing) {
-        // Save changes
         final auth = Provider.of<AuthController>(context, listen: false);
         auth.updateProfile(name: _nameController.text);
       }
@@ -82,197 +126,768 @@ class _ProfileViewState extends State<ProfileView> {
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthController>(context);
     final themeController = Provider.of<ThemeController>(context);
-    final cs = Theme.of(context).colorScheme;
+    final scanController = Provider.of<ScanController>(context);
+    final notificationController = Provider.of<NotificationController>(context);
+    final walletController = Provider.of<WalletController>(context);
+    final communityController = Provider.of<CommunityController>(context);
 
-    ImageProvider? bgImage;
+    final myPlants = scanController.getMyPlants();
+    final totalPlantsCount =
+        myPlants.length + communityController.getTotalCommunityPlantsCount();
+    final isDark = themeController.isDarkMode;
+
+    ImageProvider? profileImageProvider;
     if (auth.profileImage != null) {
-      bgImage = FileImage(File(auth.profileImage!));
+      profileImageProvider = FileImage(File(auth.profileImage!));
     } else {
-      bgImage = const NetworkImage(
+      profileImageProvider = const NetworkImage(
         'https://randomuser.me/api/portraits/men/45.jpg',
       );
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Profile'),
-        actions: [
-          IconButton(
-            onPressed: () => auth.signOut(),
-            icon: const Icon(Icons.logout),
-          ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(14),
-        children: [
-          // Profile Card
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(18.0),
-              child: Column(
-                children: [
-                  Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 44,
-                        backgroundImage: bgImage,
-                      ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: GestureDetector(
-                          onTap: _showImagePickerOptions,
-                          child: Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: cs.primary,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
-                            child: const Icon(
-                              Icons.camera_alt,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: CustomScrollView(
+        slivers: [
+          // Custom App Bar with Profile Header
+          SliverAppBar(
+            expandedHeight: 280,
+            pinned: true,
+            backgroundColor: const Color(0xFF0B6E4F),
+            flexibleSpace: FlexibleSpaceBar(
+              background: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      const Color(0xFF0B6E4F),
+                      const Color(0xFF159A6E),
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  if (_isEditing)
-                    TextField(
-                      controller: _nameController,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                      decoration: const InputDecoration(
-                        border: UnderlineInputBorder(),
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                    )
-                  else
-                    Text(
-                      auth.userName,
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                    ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '@${auth.userHandle}',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: cs.onSurface.withOpacity(0.6),
-                        ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Level 4 · Eco-Warrior',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 12),
-                  // Progress bar
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                ),
+                child: SafeArea(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Row(
+                      const SizedBox(height: 20),
+                      // Profile Image
+                      Stack(
                         children: [
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: LinearProgressIndicator(
-                                value: 0.68,
-                                minHeight: 14,
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 3),
+                            ),
+                            child: CircleAvatar(
+                              radius: 50,
+                              backgroundImage: profileImageProvider,
+                            ),
+                          ),
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: GestureDetector(
+                              onTap: _showImagePickerOptions,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.2),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(
+                                  LucideIcons.camera,
+                                  size: 18,
+                                  color: Color(0xFF0B6E4F),
+                                ),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Text(
-                            '68%',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Next level: Plant 10 more trees',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: cs.onSurface.withOpacity(0.7),
+                      const SizedBox(height: 12),
+                      // Name
+                      if (_isEditing)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 60),
+                          child: TextField(
+                            controller: _nameController,
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
                             ),
+                            decoration: const InputDecoration(
+                              border: UnderlineInputBorder(
+                                borderSide: BorderSide(color: Colors.white),
+                              ),
+                              enabledBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(color: Colors.white70),
+                              ),
+                              focusedBorder: UnderlineInputBorder(
+                                borderSide: BorderSide(color: Colors.white),
+                              ),
+                              contentPadding: EdgeInsets.zero,
+                            ),
+                          ),
+                        )
+                      else
+                        Text(
+                          auth.userName,
+                          style: GoogleFonts.poppins(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '@${auth.userHandle}',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.white.withOpacity(0.9),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              LucideIcons.award,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Level 4 · Eco-Warrior',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
-                  ElevatedButton(
-                    onPressed: _toggleEdit,
-                    style: ElevatedButton.styleFrom(
+                ),
+              ),
+            ),
+            actions: [
+              IconButton(
+                onPressed: _toggleEdit,
+                icon: Icon(
+                  _isEditing ? LucideIcons.check : LucideIcons.edit,
+                  color: Colors.white,
+                ),
+              ),
+              IconButton(
+                onPressed: () => auth.signOut(),
+                icon: const Icon(
+                  LucideIcons.logOut,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+
+          // Content
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Stats Cards
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildStatCard(
+                          context,
+                          icon: LucideIcons.leaf,
+                          label: 'Plants',
+                          value: '$totalPlantsCount',
+                          color: const Color(0xFF0B6E4F),
+                          isDark: isDark,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          context,
+                          icon: LucideIcons.scan,
+                          label: 'Scans',
+                          value: '47',
+                          color: Colors.blue,
+                          isDark: isDark,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildStatCard(
+                          context,
+                          icon: LucideIcons.trophy,
+                          label: 'Points',
+                          value: walletController.points
+                              .toString()
+                              .replaceAllMapped(
+                                RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+                                (Match m) => '${m[1]},',
+                              ),
+                          color: Colors.amber,
+                          isDark: isDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Bio Section
+                  if (_isEditing)
+                    Card(
+                      elevation: 2,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: TextField(
+                          controller: _bioController,
+                          maxLines: 3,
+                          style: GoogleFonts.poppins(fontSize: 14),
+                          decoration: InputDecoration(
+                            labelText: 'Bio',
+                            labelStyle: GoogleFonts.poppins(
+                              color: const Color(0xFF0B6E4F),
+                              fontWeight: FontWeight.w600,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? Colors.grey[700]!
+                                    : Colors.grey[300]!,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    Card(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  LucideIcons.user,
+                                  size: 18,
+                                  color: Color(0xFF0B6E4F),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'About',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _bioController.text,
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                color: isDark
+                                    ? Colors.grey[300]
+                                    : Colors.grey[700],
+                                height: 1.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                    child: Text(_isEditing ? 'Save Profile' : 'Edit Profile'),
+                  const SizedBox(height: 16),
+
+                  // Level Progress
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                LucideIcons.trendingUp,
+                                size: 18,
+                                color: Color(0xFF0B6E4F),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Level Progress',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: LinearProgressIndicator(
+                                    value: 0.68,
+                                    minHeight: 12,
+                                    backgroundColor: isDark
+                                        ? Colors.grey[800]
+                                        : Colors.grey[200],
+                                    valueColor:
+                                        const AlwaysStoppedAnimation<Color>(
+                                      Color(0xFF0B6E4F),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                '68%',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF0B6E4F),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Plant 10 more trees to reach Level 5',
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color:
+                                  isDark ? Colors.grey[400] : Colors.grey[600],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
+                  const SizedBox(height: 16),
+
+                  // Achievements
+                  Text(
+                    'Achievements',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _buildAchievementCard(
+                          context,
+                          icon: LucideIcons.sprout,
+                          title: 'First Plant',
+                          unlocked: true,
+                          isDark: isDark,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildAchievementCard(
+                          context,
+                          icon: LucideIcons.target,
+                          title: '50 Scans',
+                          unlocked: true,
+                          isDark: isDark,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: _buildAchievementCard(
+                          context,
+                          icon: LucideIcons.flame,
+                          title: '7 Day Streak',
+                          unlocked: false,
+                          isDark: isDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Settings Section
+                  Text(
+                    'Settings',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Theme Switcher
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: SwitchListTile(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      title: Text(
+                        'Dark Mode',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Switch between light and dark theme',
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                      secondary: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0B6E4F).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          isDark ? LucideIcons.moon : LucideIcons.sun,
+                          color: const Color(0xFF0B6E4F),
+                        ),
+                      ),
+                      value: isDark,
+                      activeColor: const Color(0xFF0B6E4F),
+                      onChanged: (_) => themeController.toggleTheme(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Notifications Setting
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: ListTile(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          LucideIcons.bell,
+                          color: Colors.blue,
+                        ),
+                      ),
+                      title: Text(
+                        'Notifications',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      subtitle: Text(
+                        '${notificationController.unreadCount} unread',
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                      trailing: const Icon(LucideIcons.chevronRight),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const NotificationsView(),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Account Settings (Combined Email, Password, Username)
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: ListTile(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          LucideIcons.settings,
+                          color: Colors.purple,
+                        ),
+                      ),
+                      title: Text(
+                        'Account',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Email, password & security',
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                      trailing: const Icon(LucideIcons.chevronRight),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const AccountSettingsScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Help & Support
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: ListTile(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.teal.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          LucideIcons.bookOpen,
+                          color: Colors.teal,
+                        ),
+                      ),
+                      title: Text(
+                        'User Guidelines',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Learn how to use SeedScan',
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                      trailing: const Icon(LucideIcons.chevronRight),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const UserGuidelinesScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // About
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: ListTile(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0B6E4F).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          LucideIcons.info,
+                          color: Color(0xFF0B6E4F),
+                        ),
+                      ),
+                      title: Text(
+                        'About SeedScan',
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Version 1.0.0',
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                      trailing: const Icon(LucideIcons.chevronRight),
+                      onTap: () {},
+                    ),
+                  ),
+                  const SizedBox(height: 30),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 14),
-
-          // Theme Switcher
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: SwitchListTile(
-              title: const Text('Dark Theme'),
-              secondary: Icon(
-                themeController.isDarkMode ? Icons.dark_mode : Icons.light_mode,
-                color: cs.primary,
-              ),
-              value: themeController.isDarkMode,
-              onChanged: (_) => themeController.toggleTheme(),
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Pending Tasks
-          Text(
-            'Pending Tasks',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          _taskCard(context, 'Water Golden Pothos', 'Due Today', true),
-          _taskCard(context, 'Fertilize Rose', 'Due Tomorrow', false),
-          _taskCard(context, 'Prune Mango Tree', 'Due in 3 days', false),
         ],
       ),
     );
   }
 
-  Widget _taskCard(
-      BuildContext context, String title, String due, bool isUrgent) {
-    final cs = Theme.of(context).colorScheme;
+  Widget _buildStatCard(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+    required bool isDark,
+  }) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: isUrgent ? cs.errorContainer : cs.primaryContainer,
-          child: Icon(
-            isUrgent ? Icons.warning_amber_rounded : Icons.check_circle_outline,
-            color: isUrgent ? cs.error : cs.primary,
-          ),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                icon,
+                color: color,
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
+              ),
+            ),
+          ],
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        subtitle: Text(due),
-        trailing: Checkbox(value: false, onChanged: (_) {}),
+      ),
+    );
+  }
+
+  Widget _buildAchievementCard(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required bool unlocked,
+    required bool isDark,
+  }) {
+    return Card(
+      elevation: unlocked ? 2 : 0,
+      color: unlocked ? null : (isDark ? Colors.grey[850] : Colors.grey[100]),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: unlocked
+              ? Colors.transparent
+              : (isDark ? Colors.grey[700]! : Colors.grey[300]!),
+          width: 1,
+        ),
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: unlocked
+                    ? const Color(0xFF0B6E4F).withOpacity(0.1)
+                    : (isDark ? Colors.grey[800] : Colors.grey[200]),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                icon,
+                color: unlocked
+                    ? const Color(0xFF0B6E4F)
+                    : (isDark ? Colors.grey[600] : Colors.grey[400]),
+                size: 24,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: unlocked ? FontWeight.w600 : FontWeight.w400,
+                color: unlocked
+                    ? null
+                    : (isDark ? Colors.grey[500] : Colors.grey[600]),
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
       ),
     );
   }

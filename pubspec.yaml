@@ -8,6 +8,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  
+  # Backend
+  appwrite: ^13.1.0
+  
   #Model
   tflite_flutter: ^0.11.0  
 
@@ -35,11 +39,21 @@ dependencies:
   flutter_svg: ^1.1.6
   intl: ^0.18.0
   badges: ^3.0.2
+  qr_flutter: ^4.1.0
+  gal: ^2.3.0
+  pdf: ^3.10.4
+  printing: ^5.11.1
+  share_plus: ^7.2.1
+  url_launcher: ^6.2.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^2.0.0
+
+dependency_overrides:
+  flutter_web_auth_2: ^5.0.1
+  flutter_web_auth_2_platform_interface: ^5.0.0
 
 flutter:
   uses-material-design: true

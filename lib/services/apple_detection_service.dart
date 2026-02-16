@@ -8,7 +8,7 @@ class AppleDetectionService {
   static Future<void> loadModel() async {
     if (_loaded) return;
 
-    _interpreter = await Interpreter.fromAsset('models/apple_detector.tflite');
+    _interpreter = await Interpreter.fromAsset('models/binary_model.tflite');
     _loaded = true;
   }
 
@@ -44,6 +44,15 @@ class AppleDetectionService {
     double nonApple = output[0][0];
     double apple = output[0][1];
 
-    return apple > nonApple;
+    print('🍎 Apple detection scores: apple=$apple, nonApple=$nonApple');
+
+    return apple >= 0.008;
+  }
+
+  static void dispose() {
+    if (_loaded) {
+      _interpreter.close();
+      _loaded = false;
+    }
   }
 }

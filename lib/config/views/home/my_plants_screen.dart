@@ -13,14 +13,15 @@ class MyPlantsScreen extends StatelessWidget {
         backgroundColor: cs.primaryContainer,
         foregroundColor: cs.onPrimaryContainer,
       ),
-
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // TODO: DUMMY DATA - These plant images are placeholders
+          // In production, replace with user-uploaded images from their plant collection
           _plantTile(
             "Neem Tree",
             "Healthy",
-            "https://images.unsplash.com/photo-1597262975002-c5c3b14bbd62?auto=format&fit=crop&w=400",
+            "https://images.unsplash.com/photo-1597262975002-c5c3b14bbd62?auto=format&fit=crop&w=400", // PLACEHOLDER
           ),
           _plantTile(
             "Mango Plant",

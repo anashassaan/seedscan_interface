@@ -26,33 +26,39 @@ class _MainNavigationState extends State<MainNavigation> {
     ];
 
     return Scaffold(
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: index == 3, // Only for Chat screen
       body: screens[index],
-      floatingActionButton: SizedBox(
-        width: 72,
-        height: 72,
-        child: FloatingActionButton(
-          onPressed: () => setState(() => index = 2),
-          elevation: 4,
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          shape: const CircleBorder(),
-          child: Icon(
-            Icons.qr_code_scanner,
-            size: 32,
-            color: Theme.of(context).colorScheme.onPrimary,
-          ),
-        ),
-      ),
+      floatingActionButton: index == 3
+          ? null // Hide FAB on Chat screen
+          : AnimatedScale(
+              scale: index == 3 ? 0.0 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              child: SizedBox(
+                width: 72,
+                height: 72,
+                child: FloatingActionButton(
+                  onPressed: () => setState(() => index = 2),
+                  elevation: 4,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  shape: const CircleBorder(),
+                  child: Icon(
+                    Icons.qr_code_scanner,
+                    size: 32,
+                    color: Theme.of(context).colorScheme.onPrimary,
+                  ),
+                ),
+              ),
+            ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: BottomAppBar(
-        shape: const CircularNotchedRectangle(),
+        shape: index == 3 ? null : const CircularNotchedRectangle(),
         notchMargin: 8.0,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _navItem(Icons.home_outlined, Icons.home, 'Home', 0),
             _navItem(Icons.forest_outlined, Icons.forest, 'Plants', 1),
-            const SizedBox(width: 48), // Space for FAB
+            if (index != 3) const SizedBox(width: 48), // Space for FAB
             _navItem(Icons.chat_bubble_outline, Icons.chat_bubble, 'Chat', 3),
             _navItem(Icons.person_outline, Icons.person, 'Profile', 4),
           ],

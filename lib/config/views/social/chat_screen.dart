@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/chat_controller.dart';
-import 'community_view.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -12,18 +11,12 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabController = TabController(
-    length: 2,
-    vsync: this,
-  );
+class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _inputController = TextEditingController();
   final ImagePicker _picker = ImagePicker();
 
   @override
   void dispose() {
-    _tabController.dispose();
     _inputController.dispose();
     super.dispose();
   }
@@ -67,176 +60,157 @@ class _ChatScreenState extends State<ChatScreen>
     final cs = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Social'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'SeedScan AI'),
-            Tab(text: 'Community'),
-          ],
-        ),
+        title: const Text('SeedScan AI'),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: [
-          // Chat Tab
-          Consumer<ChatController>(
-            builder: (context, chat, _) {
-              return Column(
-                children: [
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 12,
-                        horizontal: 12,
-                      ),
-                      reverse: false,
-                      itemCount: chat.messages.length,
-                      itemBuilder: (context, i) {
-                        final msg = chat.messages[i];
-                        final isUser = msg.sender == Sender.user;
-                        return Align(
-                          alignment: isUser
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(vertical: 6),
-                            padding: const EdgeInsets.all(12),
-                            constraints: BoxConstraints(
-                              maxWidth:
-                                  MediaQuery.of(context).size.width * 0.76,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isUser
-                                  ? cs.primary.withOpacity(0.12)
-                                  : cs.surfaceVariant,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (msg.image != null)
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Image.memory(
-                                      msg.image!,
-                                      width: 220,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  ),
-                                if (msg.image != null)
-                                  const SizedBox(height: 8),
-                                Text(
-                                  msg.text,
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  _formatTime(msg.time),
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.copyWith(
-                                        color: cs.onSurface.withOpacity(0.5),
-                                      ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+      body: Consumer<ChatController>(
+        builder: (context, chat, _) {
+          return Column(
+            children: [
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 12,
                   ),
-                  if (chat.isTyping)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 6,
-                      ),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
+                  reverse: false,
+                  itemCount: chat.messages.length,
+                  itemBuilder: (context, i) {
+                    final msg = chat.messages[i];
+                    final isUser = msg.sender == Sender.user;
+                    return Align(
+                      alignment:
+                          isUser ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        padding: const EdgeInsets.all(12),
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(context).size.width * 0.76,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isUser
+                              ? cs.primary.withOpacity(0.12)
+                              : cs.surfaceVariant,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            CircleAvatar(
-                              radius: 12,
-                              child: Text(
-                                'AI',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(fontWeight: FontWeight.w700),
+                            if (msg.image != null)
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.memory(
+                                  msg.image!,
+                                  width: 220,
+                                  fit: BoxFit.cover,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
+                            if (msg.image != null) const SizedBox(height: 8),
                             Text(
-                              'SeedScan AI is typing...',
-                              style: Theme.of(context).textTheme.bodySmall,
+                              msg.text,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              _formatTime(msg.time),
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
+                                    color: cs.onSurface.withOpacity(0.5),
+                                  ),
                             ),
                           ],
                         ),
                       ),
-                    ),
-                  // input area
-                  Container(
-                    padding: EdgeInsets.only(
-                      left: 12,
-                      right: 12,
-                      top: 8,
-                      bottom: MediaQuery.of(context).viewInsets.bottom > 0
-                          ? MediaQuery.of(context).viewInsets.bottom + 8
-                          : MediaQuery.of(context).padding.bottom + 8,
-                    ),
-                    color: cs.surface,
+                    );
+                  },
+                ),
+              ),
+              if (chat.isTyping)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
                     child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        IconButton(
-                          onPressed: _sendImageFromCamera,
-                          icon: const Icon(Icons.camera_alt_outlined),
-                        ),
-                        IconButton(
-                          onPressed: _sendImageFromGallery,
-                          icon: const Icon(Icons.photo_library_outlined),
-                        ),
-                        Expanded(
-                          child: TextField(
-                            controller: _inputController,
-                            textInputAction: TextInputAction.send,
-                            onSubmitted: (_) => _sendText(),
-                            decoration: InputDecoration(
-                              hintText:
-                                  'Ask SeedScan AI or send a plant photo...',
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 12,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
+                        CircleAvatar(
+                          radius: 12,
+                          child: Text(
+                            'AI',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(fontWeight: FontWeight.w700),
                           ),
                         ),
                         const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: _sendText,
-                          style: ElevatedButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                          child: const Icon(Icons.send_rounded),
+                        Text(
+                          'SeedScan AI is typing...',
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],
                     ),
                   ),
-                ],
-              );
-            },
-          ),
-          // Community Tab
-          const CommunityView(),
-        ],
+                ),
+              // input area
+              Container(
+                padding: EdgeInsets.only(
+                  left: 8,
+                  right: 8,
+                  top: 8,
+                  bottom: MediaQuery.of(context).viewInsets.bottom > 0
+                      ? MediaQuery.of(context).viewInsets.bottom + 8
+                      : 8,
+                ),
+                color: cs.surface,
+                child: SafeArea(
+                  child: Row(
+                    children: [
+                      IconButton(
+                        onPressed: _sendImageFromCamera,
+                        icon: const Icon(Icons.camera_alt_outlined),
+                      ),
+                      IconButton(
+                        onPressed: _sendImageFromGallery,
+                        icon: const Icon(Icons.photo_library_outlined),
+                      ),
+                      Expanded(
+                        child: TextField(
+                          controller: _inputController,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: (_) => _sendText(),
+                          decoration: InputDecoration(
+                            hintText: 'Ask SeedScan AI...',
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 12,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        onPressed: _sendText,
+                        icon: Icon(Icons.send_rounded, color: cs.primary),
+                        style: IconButton.styleFrom(
+                          backgroundColor: cs.primary.withOpacity(0.1),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

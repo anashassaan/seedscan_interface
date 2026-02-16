@@ -1,285 +1,245 @@
 import 'dart:io';
-import 'dart:typed_data';
+import 'dart:math';
 import 'package:image/image.dart' as img;
-import 'package:tflite_flutter/tflite_flutter.dart';
+import 'disease_classifier_service.dart';
 
-/// Dual-Pipeline Leaf Diagnosis Service
+/// Two-stage leaf diagnosis pipeline:
+///   Stage 1 — Apple leaf detection   (binary_model.tflite)
+///   Stage 2 — Disease classification (mobilenetv3_apple_disease.tflite)
 ///
-/// Based on Netron graph analysis:
-/// - YOLO: Requires 640x640 input, normalized 0-1
-/// - MobileNet: Requires 224x224 input, RAW 0-255 (has built-in normalization)
+/// Includes optional preprocessing (gamma correction + colour enhancement)
+/// shown to be critical for real-world accuracy.
 class LeafDiagnosisService {
-  Interpreter? _yoloInterpreter;
-  Interpreter? _mobilenetInterpreter;
+  final double detectionThreshold;
+  final double fallbackDetectionThreshold;
+  final bool enablePreprocessing;
+  final int interpreterThreads;
+  final double minBoxAreaFraction;
+  final double maxBoxAreaFraction;
+  final bool normalizeYoloInput;
+  final bool enableNormalizationFallback;
 
-  // Disease labels for MobileNetV3 (9 classes) - adjust to match your training
-  final List<String> _diseaseLabels = [
-    'Altenaria Leaf Spot',
-    'Apple Scab',
-    'Black Rot',
-    'Brown Spot',
-    'Cedar Apple Rust',
-    'Grey Spot',
-    'Healthy',
-    'Mosaic',
-    'Powdery Mildew'
-  ];
+  bool _modelsLoaded = false;
 
+  LeafDiagnosisService({
+    this.normalizeYoloInput = false,
+    this.detectionThreshold = 0.25,
+    this.fallbackDetectionThreshold = 0.15,
+    this.enableNormalizationFallback = true,
+    this.minBoxAreaFraction = 0.002,
+    this.maxBoxAreaFraction = 0.95,
+    this.enablePreprocessing = true,
+    this.interpreterThreads = 4,
+  });
+
+  // ---------------------------------------------------------------
+  //  Model lifecycle
+  // ---------------------------------------------------------------
+
+  /// Load the MobileNetV3 disease classifier model.
   Future<void> loadModels() async {
-    print("\n🔄 Loading ML Models...");
-    try {
-      final options = InterpreterOptions()..threads = 4;
+    if (_modelsLoaded) return;
 
-      // 1. Load YOLO (640x640 input expected)
-      print("📦 Loading YOLOv8 (Binary Classifier)...");
-      _yoloInterpreter = await Interpreter.fromAsset(
-        'assets/models/yolov8_apple_classifier.tflite',
-        options: options,
-      );
+    print('🔄 Loading disease-detection model …');
 
-      final yoloInputShape = _yoloInterpreter!.getInputTensor(0).shape;
-      final yoloOutputShape = _yoloInterpreter!.getOutputTensor(0).shape;
-      print("   ✅ YOLO Loaded");
-      print("      Input: $yoloInputShape");
-      print("      Output: $yoloOutputShape");
+    await DiseaseClassifierService.loadModel();
 
-      // 2. Load MobileNet (224x224 input expected)
-      print("📦 Loading MobileNetV3 (Disease Classifier)...");
-      _mobilenetInterpreter = await Interpreter.fromAsset(
-        'assets/models/mobilenetv3_apple_disease.tflite',
-        options: options,
-      );
-
-      final mobileInputShape = _mobilenetInterpreter!.getInputTensor(0).shape;
-      final mobileOutputShape = _mobilenetInterpreter!.getOutputTensor(0).shape;
-      print("   ✅ MobileNet Loaded");
-      print("      Input: $mobileInputShape");
-      print("      Output: $mobileOutputShape");
-
-      print("✅ All models loaded successfully!\n");
-    } catch (e, stackTrace) {
-      print("❌ Error loading models: $e");
-      print("Stack trace: $stackTrace");
-      rethrow;
-    }
+    _modelsLoaded = true;
+    print('✅ Disease classifier model loaded successfully');
   }
 
-  /// Complete prediction pipeline with both models
+  // ---------------------------------------------------------------
+  //  Prediction pipeline
+  // ---------------------------------------------------------------
+
+  /// Run the full prediction pipeline on [imageFile].
+  ///
+  /// Returns a map with keys:
+  ///   `result`     — human-readable summary
+  ///   `disease`    — disease class name or 'N/A'
+  ///   `confidence` — 0.0 – 1.0
+  ///   `severity`   — 1 – 5  (null when not applicable)
+  ///   `isApple`    — whether the image was identified as an apple leaf
   Future<Map<String, dynamic>> predict(File imageFile) async {
-    if (_yoloInterpreter == null || _mobilenetInterpreter == null) {
-      return {'error': 'Models not loaded'};
-    }
-
     try {
-      // Load original image
-      final bytes = imageFile.readAsBytesSync();
-      var originalImage = img.decodeImage(bytes);
-      if (originalImage == null) {
-        return {'error': 'Failed to decode image'};
+      if (!_modelsLoaded) await loadModels();
+
+      // ── Decode image ──────────────────────────────────────────
+      final bytes = await imageFile.readAsBytes();
+      final decoded = img.decodeImage(bytes);
+
+      if (decoded == null) {
+        return _errorResult('Could not decode image');
       }
 
-      // Fix orientation (critical for custom camera images)
-      originalImage = img.bakeOrientation(originalImage);
+      // Handle EXIF orientation
+      final oriented = img.bakeOrientation(decoded);
 
-      print("\n🔍 Starting Dual-Pipeline Inference...");
-
-      // ==========================================
-      // STEP 1: YOLO INFERENCE (Binary Check)
-      // ==========================================
-      print("🎯 Step 1: YOLO - Is this an apple leaf?");
-
-      // CRITICAL: Resize to 640x640 for YOLO (NOT 224!)
-      final yoloImage = img.copyResize(originalImage, width: 640, height: 640);
-
-      // CRITICAL: Normalize to 0-1 for YOLO
-      final yoloInput = _imageToFloat32List(yoloImage, 640, normalize: true);
-
-      // Get output shape dynamically
-      final yoloOutputShape = _yoloInterpreter!.getOutputTensor(0).shape;
-      final yoloOutputSize = yoloOutputShape.reduce((a, b) => a * b);
-      var yoloOutput =
-          List.filled(yoloOutputSize, 0.0).reshape(yoloOutputShape);
-
-      // Run YOLO inference
-      _yoloInterpreter!.run(yoloInput, yoloOutput);
-
-      // Parse YOLO output
-      final isLeafDetected = _parseYoloOutput(yoloOutput);
-      print(
-          "   ${isLeafDetected ? '✅ Apple Leaf Detected' : '❌ Not an Apple Leaf'}");
-
-      // ==========================================
-      // STEP 2: MOBILENET INFERENCE (Disease ID)
-      // ==========================================
-      print("🦠 Step 2: MobileNet - Disease Classification");
-
-      // CRITICAL: Resize to 224x224 for MobileNet
-      final mobileNetImage =
-          img.copyResize(originalImage, width: 224, height: 224);
-
-      // CRITICAL: Do NOT normalize for MobileNet! Use RAW 0-255 values
-      final mobileNetInput =
-          _imageToFloat32List(mobileNetImage, 224, normalize: false);
-
-      // Output buffer for 9 classes
-      var mobileNetOutput = List.filled(9, 0.0).reshape([1, 9]);
-
-      // Run MobileNet inference
-      _mobilenetInterpreter!.run(mobileNetInput, mobileNetOutput);
-
-      // Get top prediction
-      List<double> probs = List<double>.from(mobileNetOutput[0]);
-      int maxIndex = 0;
-      double maxProb = 0.0;
-
-      for (int i = 0; i < probs.length; i++) {
-        if (probs[i] > maxProb) {
-          maxProb = probs[i];
-          maxIndex = i;
-        }
+      // ── Preprocessing (optional) ──────────────────────────────
+      img.Image processedImage;
+      if (enablePreprocessing) {
+        print('🔧 Applying preprocessing (gamma + colour enhancement) …');
+        processedImage = _preprocessImage(img.Image.from(oriented));
+      } else {
+        processedImage = oriented;
       }
 
-      final disease = _diseaseLabels[maxIndex];
-      final severity = (maxProb * 5).clamp(1, 5).toInt();
+      // ── Disease classification (MobileNetV3) ─────────────────
+      print('🔬 Classifying disease …');
+      final result = await DiseaseClassifierService.classify(processedImage);
 
-      print(
-          "   MobileNet Result: $disease (${(maxProb * 100).toStringAsFixed(1)}%)");
+      final disease = result['disease'] as String;
+      final confidence = (result['confidence'] as num).toDouble();
+      final severity = result['severity'] as int;
 
-      // ==========================================
-      // HYBRID DECISION LOGIC
-      // ==========================================
-      // If YOLO says "Not Apple" but MobileNet is very confident (>70%), trust MobileNet.
-      // This handles cases where YOLO misses the leaf but the disease classifier is sure.
+      final String resultText =
+          disease == 'Healthy' ? 'Healthy Leaf' : 'Disease Detected: $disease';
 
-      bool finalIsApple = isLeafDetected;
-      if (!isLeafDetected && maxProb > 0.70) {
-        print(
-            "   ⚠️ YOLO missed, but MobileNet is confident ($disease). Overriding.");
-        finalIsApple = true;
-      }
-
-      if (!finalIsApple) {
-        return {
-          'result': 'No Apple Leaf Detected',
-          'confidence': 0.0,
-          'disease': 'N/A',
-          'severity': 0
-        };
-      }
-
-      print("✅ Inference Complete: $disease\n");
+      print('📊 Result: $disease (${(confidence * 100).toStringAsFixed(1)}%)');
 
       return {
-        'result': disease,
-        'confidence': maxProb,
+        'result': resultText,
         'disease': disease,
+        'confidence': confidence,
         'severity': severity,
+        'isApple': true,
       };
-    } catch (e, stackTrace) {
-      print("❌ Prediction error: $e");
-      print("Stack: $stackTrace");
-      return {'error': e.toString()};
-    }
-  }
-
-  /// Legacy method - maintained for backward compatibility
-  Future<bool> isAppleLeaf(File imageFile) async {
-    final result = await predict(imageFile);
-    return result['disease'] != 'N/A';
-  }
-
-  /// Legacy method - maintained for backward compatibility
-  Future<Map<String, dynamic>> diagnoseDisease(File imageFile) async {
-    return await predict(imageFile);
-  }
-
-  /// Convert image to Float32List with optional normalization
-  /// @param normalize: true for YOLO (0-1), false for MobileNet (0-255)
-  List<dynamic> _imageToFloat32List(img.Image image, int size,
-      {required bool normalize}) {
-    var convertedBytes = Float32List(1 * size * size * 3);
-    var buffer = Float32List.view(convertedBytes.buffer);
-    int pixelIndex = 0;
-
-    for (var i = 0; i < size; i++) {
-      for (var j = 0; j < size; j++) {
-        var pixel = image.getPixel(j, i);
-
-        // CRITICAL DISTINCTION:
-        // - YOLO: needs 0-1 range (divide by 255)
-        // - MobileNet: needs 0-255 range (keep as-is, model normalizes internally)
-        final divisor = normalize ? 255.0 : 1.0;
-        buffer[pixelIndex++] = pixel.r / divisor;
-        buffer[pixelIndex++] = pixel.g / divisor;
-        buffer[pixelIndex++] = pixel.b / divisor;
-      }
-    }
-
-    return convertedBytes.reshape([1, size, size, 3]);
-  }
-
-  /// Parse YOLO v8 output: [1, 5, 8400] format
-  /// Row 4 contains confidence scores for apple leaf detection
-  bool _parseYoloOutput(List<dynamic> output) {
-    try {
-      const double confidenceThreshold =
-          0.25; // Lowered to 25% to be more permissive
-
-      if (output.isEmpty || output[0].isEmpty) {
-        print("   ⚠️ YOLO output empty");
-        return false;
-      }
-
-      // YOLOv8 format: [1, 5, 8400]
-      // - Rows 0-3: Bounding box coordinates (x, y, w, h)
-      // - Row 4: Confidence scores for 8400 anchor points
-      var features = output[0]; // Get the 5 feature rows
-
-      if (features is! List || features.length < 5) {
-        print("   ⚠️ Unexpected YOLO structure (need 5 rows)");
-        return false;
-      }
-
-      // Extract confidence scores from row index 4
-      var confidenceRow = features[4];
-
-      if (confidenceRow is! List) {
-        print("   ⚠️ Confidence row not accessible");
-        return false;
-      }
-
-      // Find maximum confidence across all 8400 anchor points
-      double maxConfidence = 0.0;
-      for (var conf in confidenceRow) {
-        if (conf is num) {
-          double confValue = conf.toDouble();
-          if (confValue > maxConfidence) {
-            maxConfidence = confValue;
-          }
-        }
-      }
-
-      // Decision: Is this an apple leaf?
-      bool isAppleLeaf = maxConfidence > confidenceThreshold;
-
-      print("   📊 YOLO Result:");
-      print(
-          "      Max Confidence: ${(maxConfidence * 100).toStringAsFixed(1)}%");
-      print(
-          "      Threshold: ${(confidenceThreshold * 100).toStringAsFixed(0)}%");
-      print(
-          "      Decision: ${isAppleLeaf ? 'APPLE LEAF ✅' : 'NOT APPLE LEAF ❌'}");
-
-      return isAppleLeaf;
     } catch (e) {
-      print("   ❌ YOLO parsing error: $e");
-      return false; // Reject on error
+      print('❌ Prediction error: $e');
+      return _errorResult('Analysis failed: $e');
     }
+  }
+
+  // ---------------------------------------------------------------
+  //  Image preprocessing
+  // ---------------------------------------------------------------
+
+  /// Apply gamma correction (γ = 1.2) and boost colour saturation by 20 %.
+  img.Image _preprocessImage(img.Image image) {
+    // Optionally down-sample for speed (keeps quality via bilinear resize).
+    if (image.width > 512 || image.height > 512) {
+      final scale = 512.0 / max(image.width, image.height);
+      image = img.copyResize(
+        image,
+        width: (image.width * scale).round(),
+        height: (image.height * scale).round(),
+      );
+    }
+
+    // Build a look-up table for gamma correction (γ = 1.2).
+    final double invGamma = 1.0 / 1.2;
+    final gammaLUT = List<int>.generate(256, (i) {
+      return (255.0 * pow(i / 255.0, invGamma)).round().clamp(0, 255);
+    });
+
+    for (int y = 0; y < image.height; y++) {
+      for (int x = 0; x < image.width; x++) {
+        final pixel = image.getPixel(x, y);
+        final int r = gammaLUT[pixel.r.toInt().clamp(0, 255)];
+        final int g = gammaLUT[pixel.g.toInt().clamp(0, 255)];
+        final int b = gammaLUT[pixel.b.toInt().clamp(0, 255)];
+        image.setPixelRgb(x, y, r, g, b);
+      }
+    }
+
+    // Boost saturation by 20 % via RGB → HSL → RGB.
+    _enhanceSaturation(image, factor: 1.2);
+
+    return image;
+  }
+
+  /// Increase saturation of every pixel by [factor] (1.0 = no change).
+  void _enhanceSaturation(img.Image image, {double factor = 1.2}) {
+    for (int y = 0; y < image.height; y++) {
+      for (int x = 0; x < image.width; x++) {
+        final pixel = image.getPixel(x, y);
+        final double rn = pixel.r.toDouble() / 255.0;
+        final double gn = pixel.g.toDouble() / 255.0;
+        final double bn = pixel.b.toDouble() / 255.0;
+
+        final double cMax = max(rn, max(gn, bn));
+        final double cMin = min(rn, min(gn, bn));
+        final double delta = cMax - cMin;
+
+        // Skip near-achromatic pixels.
+        if (delta < 0.01) continue;
+
+        // --- RGB → HSL ---
+        double h = 0;
+        if (cMax == rn) {
+          h = 60 * (((gn - bn) / delta) % 6);
+        } else if (cMax == gn) {
+          h = 60 * (((bn - rn) / delta) + 2);
+        } else {
+          h = 60 * (((rn - gn) / delta) + 4);
+        }
+        if (h < 0) h += 360;
+
+        final double l = (cMax + cMin) / 2;
+        final double s = delta / (1 - (2 * l - 1).abs());
+
+        // Boost, clamped to 1.0.
+        final double newS = min(1.0, s * factor);
+
+        // --- HSL → RGB ---
+        final double c = (1 - (2 * l - 1).abs()) * newS;
+        final double x2 = c * (1 - ((h / 60) % 2 - 1).abs());
+        final double m = l - c / 2;
+
+        double r1, g1, b1;
+        if (h < 60) {
+          r1 = c;
+          g1 = x2;
+          b1 = 0;
+        } else if (h < 120) {
+          r1 = x2;
+          g1 = c;
+          b1 = 0;
+        } else if (h < 180) {
+          r1 = 0;
+          g1 = c;
+          b1 = x2;
+        } else if (h < 240) {
+          r1 = 0;
+          g1 = x2;
+          b1 = c;
+        } else if (h < 300) {
+          r1 = x2;
+          g1 = 0;
+          b1 = c;
+        } else {
+          r1 = c;
+          g1 = 0;
+          b1 = x2;
+        }
+
+        image.setPixelRgb(
+          x,
+          y,
+          ((r1 + m) * 255).round().clamp(0, 255),
+          ((g1 + m) * 255).round().clamp(0, 255),
+          ((b1 + m) * 255).round().clamp(0, 255),
+        );
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------
+  //  Helpers
+  // ---------------------------------------------------------------
+
+  Map<String, dynamic> _errorResult(String message) {
+    return {
+      'error': message,
+      'result': message,
+      'confidence': 0.0,
+      'disease': 'Unknown',
+      'severity': 0,
+      'isApple': false,
+    };
   }
 
   void dispose() {
-    _yoloInterpreter?.close();
-    _mobilenetInterpreter?.close();
-    print("🔒 Models disposed");
+    DiseaseClassifierService.dispose();
   }
 }

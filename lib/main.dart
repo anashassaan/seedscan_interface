@@ -3,13 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'config/controllers/theme_controller.dart';
 import 'config/controllers/notification_controller.dart';
+import 'config/controllers/admin_controller.dart';
 import 'config/theme.dart';
 import 'config/controllers/auth_controller.dart';
 import 'config/controllers/scan_controller.dart';
 import 'config/controllers/chat_controller.dart';
+import 'config/controllers/wallet_controller.dart';
+import 'config/controllers/community_controller.dart';
 
 import 'config/views/auth/login_view.dart';
 import 'config/views/main/main_navigation.dart';
+import 'config/views/admin/admin_dashboard_view.dart';
 
 void main() {
   runApp(const SeedScanApp());
@@ -25,10 +29,16 @@ class SeedScanApp extends StatelessWidget {
         ChangeNotifierProvider<AuthController>(create: (_) => AuthController()),
         ChangeNotifierProvider<ScanController>(create: (_) => ScanController()),
         ChangeNotifierProvider<ChatController>(create: (_) => ChatController()),
+        ChangeNotifierProvider<CommunityController>(
+            create: (_) => CommunityController()),
         ChangeNotifierProvider<ThemeController>(
             create: (_) => ThemeController()),
         ChangeNotifierProvider<NotificationController>(
             create: (_) => NotificationController()),
+        ChangeNotifierProvider<WalletController>(
+            create: (_) => WalletController()),
+        ChangeNotifierProvider<AdminController>(
+            create: (_) => AdminController()),
       ],
       child: Consumer<ThemeController>(
         builder: (context, themeController, _) {
@@ -53,9 +63,18 @@ class EntryDecider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthController>(context);
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 400),
-      child: auth.isLoggedIn ? const MainNavigation() : const LoginView(),
-    );
+
+    // Show login if not logged in
+    if (!auth.isLoggedIn) {
+      return const LoginView();
+    }
+
+    // Admin users get the admin dashboard
+    if (auth.isAdmin) {
+      return const AdminDashboardView();
+    }
+
+    // Regular users get the main app
+    return const MainNavigation();
   }
 }
