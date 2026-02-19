@@ -45,6 +45,9 @@ dependencies:
   printing: ^5.11.1
   share_plus: ^7.2.1
   url_launcher: ^6.2.2
+  file_picker: ^8.0.0+1
+  csv: ^6.0.0
+  uuid: ^4.3.3
 
 dev_dependencies:
   flutter_test:

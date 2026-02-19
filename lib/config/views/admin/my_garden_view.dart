@@ -37,7 +37,7 @@ class MyGardenView extends StatelessWidget {
                   elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(color: Colors.grey.shade200),
+                    side: BorderSide(color: cs.outlineVariant),
                   ),
                   child: ListTile(
                     contentPadding:
@@ -67,7 +67,8 @@ class MyGardenView extends StatelessWidget {
                           ],
                         ),
                         Text('$totalPlants Plants recorded',
-                            style: TextStyle(color: Colors.grey.shade600)),
+                            style: TextStyle(
+                                color: cs.onSurface.withOpacity(0.6))),
                       ],
                     ),
                     trailing: const Icon(LucideIcons.chevronRight),
@@ -101,7 +102,7 @@ class MyGardenView extends StatelessWidget {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                      color: Colors.grey[300],
+                      color: Theme.of(context).colorScheme.outlineVariant,
                       borderRadius: BorderRadius.circular(10)),
                 ),
               ),
@@ -134,10 +135,13 @@ class MyGardenView extends StatelessWidget {
                             leading: Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                  color: Colors.green.shade50,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .primaryContainer
+                                      .withOpacity(0.3),
                                   borderRadius: BorderRadius.circular(10)),
-                              child: const Icon(LucideIcons.leaf,
-                                  color: Colors.green),
+                              child: Icon(LucideIcons.leaf,
+                                  color: Theme.of(context).colorScheme.primary),
                             ),
                             title: Text(type,
                                 style: const TextStyle(

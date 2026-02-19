@@ -16,13 +16,13 @@ class LoginView extends StatefulWidget {
 
 class _LoginViewState extends State<LoginView> {
   final _formKey = GlobalKey<FormState>();
-  final TextEditingController _email = TextEditingController();
+  final TextEditingController _loginId = TextEditingController();
   final TextEditingController _password = TextEditingController();
   bool _loading = false;
 
   @override
   void dispose() {
-    _email.dispose();
+    _loginId.dispose();
     _password.dispose();
     super.dispose();
   }
@@ -32,13 +32,14 @@ class _LoginViewState extends State<LoginView> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
     final ok = await auth.signIn(
-      email: _email.text.trim(),
+      emailOrUsername: _loginId.text.trim(),
       password: _password.text,
     );
     setState(() => _loading = false);
     if (!ok && mounted) {
+      final errorMsg = auth.authError ?? 'Sign in failed — check credentials';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sign in failed — check credentials')),
+        SnackBar(content: Text(errorMsg)),
       );
     }
   }
@@ -130,7 +131,7 @@ class _LoginViewState extends State<LoginView> {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    'Sign in with your Email',
+                                    'Sign in with your Email or Username',
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodyMedium
@@ -140,14 +141,14 @@ class _LoginViewState extends State<LoginView> {
                                   ),
                                   const SizedBox(height: 18),
                                   CustomTextField(
-                                    controller: _email,
-                                    label: 'Email',
-                                    hint: 'name@gmail.com',
-                                    keyboardType: TextInputType.emailAddress,
+                                    controller: _loginId,
+                                    label: 'Email or Username',
+                                    hint: 'name@gmail.com or username',
+                                    keyboardType: TextInputType.text,
                                     validator: Provider.of<AuthController>(
                                       context,
                                       listen: false,
-                                    ).validateEmail,
+                                    ).validateLoginId,
                                   ),
                                   const SizedBox(height: 12),
                                   CustomTextField(

@@ -41,10 +41,11 @@ class _SignUpViewState extends State<SignUpView> {
     );
     setState(() => _loading = false);
     if (!ok && mounted) {
+      final errorMsg = auth.authError ?? 'Sign up failed \u2014 check details';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sign up failed — check details')),
+        SnackBar(content: Text(errorMsg)),
       );
-    } else {
+    } else if (mounted) {
       Navigator.of(
         context,
       ).pop(); // will cause entrydecider to route to main navigation

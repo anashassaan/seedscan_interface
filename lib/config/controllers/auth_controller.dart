@@ -1,13 +1,15 @@
 // lib/controllers/auth_controller.dart
 import 'package:flutter/material.dart';
+import 'package:appwrite/appwrite.dart';
 import '../../services/appwrite_service.dart';
+import '../../models/user_model.dart';
 
 class AuthController extends ChangeNotifier {
   AuthController();
 
   final AppwriteService _appwriteService = AppwriteService();
 
-  // Simple in-memory user model for demo
+  // ── State ────────────────────────────────────────────────────────────────
   String? _name;
   String? _email;
   String? _username;
@@ -15,19 +17,29 @@ class AuthController extends ChangeNotifier {
   bool _loggedIn = false;
   bool _isAdmin = false;
   String? _userId;
+  String? _authError;
+  UserModel? _userModel;
+  int _walletBalance = 0;
+  int _currentStreak = 0;
 
+  // ── Getters ──────────────────────────────────────────────────────────────
   bool get isLoggedIn => _loggedIn;
   bool get isAdmin => _isAdmin;
+  String? get authError => _authError;
   String get userName => _name ?? 'Student';
   String get userHandle => _username ?? 'user123';
   String? get userEmail => _email;
   String? get profileImage => _profileImagePath;
   String? get userId => _userId;
+  UserModel? get userModel => _userModel;
+  int get walletBalance => _walletBalance;
+  int get currentStreak => _currentStreak;
 
-  // Validation helpers
+  // ── Validation helpers ───────────────────────────────────────────────────
   String? validateName(String? v) {
-    if (v == null || v.trim().length < 3)
+    if (v == null || v.trim().length < 3) {
       return 'Enter full name (min 3 chars)';
+    }
     return null;
   }
 
@@ -45,13 +57,43 @@ class AuthController extends ChangeNotifier {
   }
 
   String? validatePassword(String? v) {
-    if (v == null || v.length < 6) return 'Password min 6 characters';
+    if (v == null || v.length < 8) {
+      return 'Password min 8 characters';
+    }
     return null;
   }
 
-  Future<bool> signIn({required String email, required String password}) async {
+  /// Validates the login identifier (email or username).
+  String? validateLoginId(String? v) {
+    if (v == null || v.trim().isEmpty) return 'Email or username required';
+    if (v.trim().length < 3) return 'Min 3 characters';
+    return null;
+  }
+
+  // ── Sign In (supports email OR username) ──────────────────────────────────
+  Future<bool> signIn(
+      {required String emailOrUsername, required String password}) async {
+    _authError = null;
     try {
-      // Try Appwrite authentication first
+      String email = emailOrUsername.trim();
+
+      // If the input doesn't look like an email, treat it as a username
+      if (!email.contains('@')) {
+        final userDoc = await _appwriteService.getUserByUsername(email);
+        if (userDoc == null) {
+          _authError = 'Username not found. Please sign up first.';
+          notifyListeners();
+          return false;
+        }
+        // Get the email from the user document
+        email = userDoc.data['email'] ?? '';
+        if (email.isEmpty) {
+          _authError = 'Account error. Please contact support.';
+          notifyListeners();
+          return false;
+        }
+      }
+
       final session = await _appwriteService.signIn(email, password);
       if (session != null) {
         final user = await _appwriteService.getCurrentUser();
@@ -62,6 +104,9 @@ class AuthController extends ChangeNotifier {
           _username = user.email.split('@').first;
           _loggedIn = true;
 
+          // Load user profile document from DB
+          await _loadUserProfile(user.$id);
+
           // Check admin role
           _isAdmin = await _appwriteService.isAdmin();
 
@@ -69,76 +114,110 @@ class AuthController extends ChangeNotifier {
           return true;
         }
       }
-    } catch (e) {
-      // Fall back to mock sign-in
-      print('Appwrite signin failed, using mock signin: $e');
-    }
+    } on AppwriteException catch (e) {
+      final type = e.type ?? '';
+      final code = e.code ?? 0;
 
-    // Mock sign-in
-    await Future<void>.delayed(const Duration(milliseconds: 950));
-    if (validateEmail(email) != null || validatePassword(password) != null) {
+      if (type == 'user_not_found') {
+        _authError = 'User does not exist. Please sign up first.';
+      } else if (type == 'user_invalid_credentials' || code == 401) {
+        _authError = 'Invalid email/username or password.';
+      } else if (type == 'general_rate_limit_exceeded' || code == 429) {
+        _authError = 'Too many attempts. Please try again later.';
+      } else {
+        _authError = e.message ?? 'Sign in failed. Please try again.';
+      }
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _authError = 'Connection error. Please check your internet.';
+      notifyListeners();
       return false;
     }
 
-    _email = email;
-    _username = email.split('@').first;
-    _name = email.split('@').first;
-    _loggedIn = true;
-
-    // Demo: Make specific emails admin
-    _isAdmin = email.toLowerCase().contains('admin');
-
+    _authError = 'Sign in failed. Please try again.';
     notifyListeners();
-    return true;
+    return false;
   }
 
+  // ── Sign Up ──────────────────────────────────────────────────────────────
   Future<bool> signUp({
     required String fullName,
     required String username,
     required String email,
     required String password,
   }) async {
+    _authError = null;
     try {
-      // Try Appwrite registration first
+      // 1. Create Appwrite Auth account
       final user = await _appwriteService.signUp(
         email: email,
         password: password,
         name: fullName,
       );
-      if (user != null) {
-        // Auto sign in after signup
-        return await signIn(email: email, password: password);
-      }
-    } catch (e) {
-      // Fall back to mock registration
-      print('Appwrite signup failed, using mock signup: $e');
-    }
 
-    // Mock sign-up with minimal checks
-    await Future<void>.delayed(const Duration(milliseconds: 950));
-    if (validateName(fullName) != null ||
-        validateUsername(username) != null ||
-        validateEmail(email) != null ||
-        validatePassword(password) != null) {
+      if (user != null) {
+        // 2. Sign in to get a session (needed for DB writes)
+        await _appwriteService.signIn(email, password);
+
+        // 3. Create the user profile document in `users` collection
+        //    Document ID = Auth user $id so they stay linked.
+        try {
+          await _appwriteService.createUserDocument(
+            userId: user.$id,
+            name: fullName,
+            username: username,
+            email: email,
+          );
+        } catch (dbErr) {
+          // If the document already exists (e.g. retry), that's OK.
+          debugPrint('User document creation note: $dbErr');
+        }
+
+        // 4. Set local state
+        _userId = user.$id;
+        _email = email;
+        _name = fullName;
+        _username = username;
+        _loggedIn = true;
+        _walletBalance = 0;
+        _currentStreak = 0;
+        _isAdmin = false;
+
+        notifyListeners();
+        return true;
+      }
+    } on AppwriteException catch (e) {
+      final type = e.type ?? '';
+
+      if (type == 'user_already_exists') {
+        _authError = 'An account with this email already exists.';
+      } else if (type == 'general_argument_invalid') {
+        _authError = 'Invalid details. Password must be 8+ characters.';
+      } else if (type == 'general_rate_limit_exceeded') {
+        _authError = 'Too many attempts. Please try again later.';
+      } else {
+        _authError = e.message ?? 'Sign up failed. Please try again.';
+      }
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _authError = 'Connection error. Please check your internet.';
+      notifyListeners();
       return false;
     }
-    _name = fullName;
-    _username = username;
-    _email = email;
-    _loggedIn = true;
 
-    // Demo: Make specific emails admin
-    _isAdmin = email.toLowerCase().contains('admin');
-
+    _authError = 'Sign up failed. Please try again.';
     notifyListeners();
-    return true;
+    return false;
   }
 
+  // ── Sign Out ─────────────────────────────────────────────────────────────
   Future<void> signOut() async {
     try {
       await _appwriteService.signOut();
     } catch (e) {
-      print('Appwrite signout error: $e');
+      debugPrint('Appwrite signout error: $e');
     }
 
     _loggedIn = false;
@@ -148,10 +227,14 @@ class AuthController extends ChangeNotifier {
     _username = null;
     _profileImagePath = null;
     _userId = null;
+    _userModel = null;
+    _walletBalance = 0;
+    _currentStreak = 0;
+    _authError = null;
     notifyListeners();
   }
 
-  /// Initialize Appwrite and check existing session
+  // ── Initialize (check existing session on app start) ─────────────────────
   Future<void> initialize() async {
     try {
       _appwriteService.initialize();
@@ -162,14 +245,40 @@ class AuthController extends ChangeNotifier {
         _name = user.name;
         _username = user.email.split('@').first;
         _loggedIn = true;
+
+        // Load user profile document
+        await _loadUserProfile(user.$id);
+
         _isAdmin = await _appwriteService.isAdmin();
         notifyListeners();
       }
     } catch (e) {
-      print('Auth initialization error: $e');
+      debugPrint('Auth initialization error: $e');
     }
   }
 
+  // ── Load user profile from DB `users` collection ─────────────────────────
+  Future<void> _loadUserProfile(String userId) async {
+    try {
+      final doc = await _appwriteService.getUserDocument(userId);
+      if (doc != null) {
+        _userModel = UserModel.fromJson(doc.data);
+        _walletBalance = _userModel!.walletBalance;
+        _currentStreak = _userModel!.currentStreak;
+        // Use DB name/username if available
+        if (_userModel!.name.isNotEmpty) {
+          _name = _userModel!.name;
+        }
+        if (_userModel!.username.isNotEmpty) {
+          _username = _userModel!.username;
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to load user profile: $e');
+    }
+  }
+
+  // ── Update profile ──────────────────────────────────────────────────────
   void updateProfile({required String name, String? imagePath}) {
     _name = name;
     if (imagePath != null) {

@@ -1,55 +1,295 @@
 // lib/models/community_model.dart
+/// Matches Appwrite collection: `communities`
 import 'package:flutter/material.dart';
 
 class Community {
   final String id;
   final String name;
-  final String description;
+  final String? description;
+  final String creatorId;
+  final String? coverImageId;
+  final String? imageUrl;
+  final String qrCodeUrl;
+  final String inviteCode;
   final int memberCount;
   final int plantCount;
-  final String? imageUrl;
   final String category;
+  final bool isActive;
   final DateTime createdAt;
-  final bool isArchived;
 
   Community({
     required this.id,
     required this.name,
-    required this.description,
-    required this.memberCount,
-    required this.plantCount,
+    this.description,
+    this.creatorId = '',
+    this.coverImageId,
     this.imageUrl,
-    required this.category,
+    this.qrCodeUrl = '',
+    this.inviteCode = '',
+    this.memberCount = 1,
+    this.plantCount = 0,
+    this.category = 'General',
+    this.isActive = true,
     required this.createdAt,
-    this.isArchived = false,
   });
 
-  // Create a copy with optional parameter changes
+  factory Community.fromJson(Map<String, dynamic> json) {
+    return Community(
+      id: json['\$id'] ?? json['id'] ?? '',
+      name: json['name'] ?? '',
+      description: json['description'],
+      creatorId: json['creator_id'] ?? '',
+      coverImageId: json['cover_image_id'],
+      imageUrl: json['image_url'],
+      qrCodeUrl: json['qr_code_url'] ?? '',
+      inviteCode: json['invite_code'] ?? '',
+      memberCount: json['member_count'] ?? 1,
+      plantCount: json['plant_count'] ?? 0,
+      category: json['category'] ?? 'General',
+      isActive: json['is_active'] ?? true,
+      createdAt: DateTime.parse(
+        json['created_at'] ??
+            json['\$createdAt'] ??
+            DateTime.now().toIso8601String(),
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'description': description,
+      'creator_id': creatorId,
+      'cover_image_id': coverImageId,
+      'image_url': imageUrl,
+      'qr_code_url': qrCodeUrl,
+      'invite_code': inviteCode,
+      'member_count': memberCount,
+      'plant_count': plantCount,
+      'category': category,
+      'is_active': isActive,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+
   Community copyWith({
     String? id,
     String? name,
     String? description,
+    String? creatorId,
+    String? coverImageId,
+    String? imageUrl,
+    String? qrCodeUrl,
+    String? inviteCode,
     int? memberCount,
     int? plantCount,
-    String? imageUrl,
     String? category,
+    bool? isActive,
     DateTime? createdAt,
-    bool? isArchived,
   }) {
     return Community(
       id: id ?? this.id,
       name: name ?? this.name,
       description: description ?? this.description,
+      creatorId: creatorId ?? this.creatorId,
+      coverImageId: coverImageId ?? this.coverImageId,
+      imageUrl: imageUrl ?? this.imageUrl,
+      qrCodeUrl: qrCodeUrl ?? this.qrCodeUrl,
+      inviteCode: inviteCode ?? this.inviteCode,
       memberCount: memberCount ?? this.memberCount,
       plantCount: plantCount ?? this.plantCount,
-      imageUrl: imageUrl ?? this.imageUrl,
       category: category ?? this.category,
+      isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
-      isArchived: isArchived ?? this.isArchived,
     );
   }
 }
 
+/// Matches Appwrite collection: `community_posts`
+class CommunityPost {
+  final String id;
+  final String communityId;
+  final String authorId;
+  final String authorName;
+  final String content;
+  final String? imageId;
+  final String postType; // general, plant_update, tip, achievement
+  final String? linkedPlantId;
+  final int likesCount;
+  final int commentsCount;
+  final DateTime createdAt;
+
+  CommunityPost({
+    required this.id,
+    required this.communityId,
+    required this.authorId,
+    required this.authorName,
+    required this.content,
+    this.imageId,
+    required this.postType,
+    this.linkedPlantId,
+    this.likesCount = 0,
+    this.commentsCount = 0,
+    required this.createdAt,
+  });
+
+  factory CommunityPost.fromJson(Map<String, dynamic> json) {
+    return CommunityPost(
+      id: json['\$id'] ?? json['id'] ?? '',
+      communityId: json['community_id'] ?? '',
+      authorId: json['author_id'] ?? '',
+      authorName: json['author_name'] ?? '',
+      content: json['content'] ?? '',
+      imageId: json['image_id'],
+      postType: json['post_type'] ?? 'general',
+      linkedPlantId: json['linked_plant_id'],
+      likesCount: json['likes_count'] ?? 0,
+      commentsCount: json['comments_count'] ?? 0,
+      createdAt: DateTime.parse(
+        json['created_at'] ??
+            json['\$createdAt'] ??
+            DateTime.now().toIso8601String(),
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'community_id': communityId,
+      'author_id': authorId,
+      'author_name': authorName,
+      'content': content,
+      'image_id': imageId,
+      'post_type': postType,
+      'linked_plant_id': linkedPlantId,
+      'likes_count': likesCount,
+      'comments_count': commentsCount,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+}
+
+/// Matches Appwrite collection: `community_comments`
+class CommunityComment {
+  final String id;
+  final String postId;
+  final String authorId;
+  final String authorName;
+  final String content;
+  final DateTime createdAt;
+
+  CommunityComment({
+    required this.id,
+    required this.postId,
+    required this.authorId,
+    required this.authorName,
+    required this.content,
+    required this.createdAt,
+  });
+
+  factory CommunityComment.fromJson(Map<String, dynamic> json) {
+    return CommunityComment(
+      id: json['\$id'] ?? json['id'] ?? '',
+      postId: json['post_id'] ?? '',
+      authorId: json['author_id'] ?? '',
+      authorName: json['author_name'] ?? '',
+      content: json['content'] ?? '',
+      createdAt: DateTime.parse(
+        json['created_at'] ??
+            json['\$createdAt'] ??
+            DateTime.now().toIso8601String(),
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'post_id': postId,
+      'author_id': authorId,
+      'author_name': authorName,
+      'content': content,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+}
+
+/// Matches Appwrite collection: `community_likes`
+class CommunityLike {
+  final String id;
+  final String postId;
+  final String userId;
+  final DateTime createdAt;
+
+  CommunityLike({
+    required this.id,
+    required this.postId,
+    required this.userId,
+    required this.createdAt,
+  });
+
+  factory CommunityLike.fromJson(Map<String, dynamic> json) {
+    return CommunityLike(
+      id: json['\$id'] ?? json['id'] ?? '',
+      postId: json['post_id'] ?? '',
+      userId: json['user_id'] ?? '',
+      createdAt: DateTime.parse(
+        json['created_at'] ??
+            json['\$createdAt'] ??
+            DateTime.now().toIso8601String(),
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'post_id': postId,
+      'user_id': userId,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
+}
+
+/// Matches Appwrite collection: `community_members`
+class CommunityMember {
+  final String id;
+  final String communityId;
+  final String userId;
+  final String role; // admin, moderator, member
+  final DateTime joinedAt;
+
+  CommunityMember({
+    required this.id,
+    required this.communityId,
+    required this.userId,
+    this.role = 'member',
+    required this.joinedAt,
+  });
+
+  factory CommunityMember.fromJson(Map<String, dynamic> json) {
+    return CommunityMember(
+      id: json['\$id'] ?? json['id'] ?? '',
+      communityId: json['community_id'] ?? '',
+      userId: json['user_id'] ?? '',
+      role: json['role'] ?? 'member',
+      joinedAt: DateTime.parse(
+        json['joined_at'] ??
+            json['\$createdAt'] ??
+            DateTime.now().toIso8601String(),
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'community_id': communityId,
+      'user_id': userId,
+      'role': role,
+      'joined_at': joinedAt.toIso8601String(),
+    };
+  }
+}
+
+/// Helper for backward compatibility with community plant display.
 class CommunityPlant {
   final String id;
   final String communityId;
@@ -63,8 +303,8 @@ class CommunityPlant {
   final double? longitude;
   final String? imageUrl;
   final DateTime plantedDate;
-  final String status; // "Healthy", "Growing", "Needs Care", "Flowering"
-  final String category; // "Tree", "Shrub", "Herb", "Flower", etc.
+  final String status;
+  final String category;
   final String? description;
   final int likeCount;
   final int commentCount;

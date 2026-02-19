@@ -1,107 +1,91 @@
 // lib/models/plant_model.dart
+/// Matches Appwrite collection: `plants`
 
 class PlantModel {
   final String id;
-  final String userId;
-  final String qrCode;
-  final String name;
   final String species;
-  final String? imageUrl;
-  final DateTime plantedDate;
-  final String? location;
-  final String? communityId;
-  final int healthScore;
-  final List<HealthCheck> healthChecks;
-  final DateTime createdAt;
+  final String guardianId;
+  final String? driveId;
+  final String? nickname;
+  final double locationLat;
+  final double locationLong;
+  final String healthStatus; // healthy, diseased, critical, dead
+  final String imageUrl;
+  final DateTime? lastWatered;
+  final List<String> pHashHistory;
 
   PlantModel({
     required this.id,
-    required this.userId,
-    required this.qrCode,
-    required this.name,
     required this.species,
-    this.imageUrl,
-    required this.plantedDate,
-    this.location,
-    this.communityId,
-    this.healthScore = 100,
-    this.healthChecks = const [],
-    required this.createdAt,
+    required this.guardianId,
+    this.driveId,
+    this.nickname,
+    required this.locationLat,
+    required this.locationLong,
+    this.healthStatus = 'healthy',
+    required this.imageUrl,
+    this.lastWatered,
+    this.pHashHistory = const [],
   });
 
   factory PlantModel.fromJson(Map<String, dynamic> json) {
     return PlantModel(
       id: json['\$id'] ?? json['id'] ?? '',
-      userId: json['userId'] ?? '',
-      qrCode: json['qrCode'] ?? '',
-      name: json['name'] ?? '',
       species: json['species'] ?? '',
-      imageUrl: json['imageUrl'],
-      plantedDate: DateTime.parse(
-          json['plantedDate'] ?? DateTime.now().toIso8601String()),
-      location: json['location'],
-      communityId: json['communityId'],
-      healthScore: json['healthScore'] ?? 100,
-      healthChecks: (json['healthChecks'] as List<dynamic>?)
-              ?.map((e) => HealthCheck.fromJson(e))
-              .toList() ??
-          [],
-      createdAt: DateTime.parse(json['createdAt'] ??
-          json['\$createdAt'] ??
-          DateTime.now().toIso8601String()),
+      guardianId: json['guardian_id'] ?? '',
+      driveId: json['drive_id'],
+      nickname: json['nickname'],
+      locationLat: (json['location_lat'] ?? 0.0).toDouble(),
+      locationLong: (json['location_long'] ?? 0.0).toDouble(),
+      healthStatus: json['health_status'] ?? 'healthy',
+      imageUrl: json['image_url'] ?? '',
+      lastWatered: json['last_watered'] != null
+          ? DateTime.parse(json['last_watered'])
+          : null,
+      pHashHistory: List<String>.from(json['pHash_history'] ?? []),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
-      'userId': userId,
-      'qrCode': qrCode,
-      'name': name,
       'species': species,
-      'imageUrl': imageUrl,
-      'plantedDate': plantedDate.toIso8601String(),
-      'location': location,
-      'communityId': communityId,
-      'healthScore': healthScore,
-      'healthChecks': healthChecks.map((e) => e.toJson()).toList(),
-      'createdAt': createdAt.toIso8601String(),
+      'guardian_id': guardianId,
+      'drive_id': driveId,
+      'nickname': nickname,
+      'location_lat': locationLat,
+      'location_long': locationLong,
+      'health_status': healthStatus,
+      'image_url': imageUrl,
+      'last_watered': lastWatered?.toIso8601String(),
+      'pHash_history': pHashHistory,
     };
   }
-}
 
-class HealthCheck {
-  final DateTime date;
-  final String status;
-  final String? disease;
-  final double confidence;
-  final String? imageUrl;
-
-  HealthCheck({
-    required this.date,
-    required this.status,
-    this.disease,
-    required this.confidence,
-    this.imageUrl,
-  });
-
-  factory HealthCheck.fromJson(Map<String, dynamic> json) {
-    return HealthCheck(
-      date: DateTime.parse(json['date'] ?? DateTime.now().toIso8601String()),
-      status: json['status'] ?? 'unknown',
-      disease: json['disease'],
-      confidence: (json['confidence'] ?? 0.0).toDouble(),
-      imageUrl: json['imageUrl'],
+  PlantModel copyWith({
+    String? id,
+    String? species,
+    String? guardianId,
+    String? driveId,
+    String? nickname,
+    double? locationLat,
+    double? locationLong,
+    String? healthStatus,
+    String? imageUrl,
+    DateTime? lastWatered,
+    List<String>? pHashHistory,
+  }) {
+    return PlantModel(
+      id: id ?? this.id,
+      species: species ?? this.species,
+      guardianId: guardianId ?? this.guardianId,
+      driveId: driveId ?? this.driveId,
+      nickname: nickname ?? this.nickname,
+      locationLat: locationLat ?? this.locationLat,
+      locationLong: locationLong ?? this.locationLong,
+      healthStatus: healthStatus ?? this.healthStatus,
+      imageUrl: imageUrl ?? this.imageUrl,
+      lastWatered: lastWatered ?? this.lastWatered,
+      pHashHistory: pHashHistory ?? this.pHashHistory,
     );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'date': date.toIso8601String(),
-      'status': status,
-      'disease': disease,
-      'confidence': confidence,
-      'imageUrl': imageUrl,
-    };
   }
 }

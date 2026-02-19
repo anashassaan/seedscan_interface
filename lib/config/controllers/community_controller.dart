@@ -238,7 +238,7 @@ class CommunityController extends ChangeNotifier {
   // Get all communities
   List<Community> getCommunities() {
     // Update plant counts dynamically before returning
-    return _communities.map((community) {
+    return _communities.map<Community>((community) {
       final plantCount = _communityPlants[community.id]?.length ?? 0;
       return community.copyWith(plantCount: plantCount);
     }).toList();
@@ -323,7 +323,8 @@ class CommunityController extends ChangeNotifier {
     final lowerQuery = query.toLowerCase();
     return _communities.where((community) {
       return community.name.toLowerCase().contains(lowerQuery) ||
-          community.description.toLowerCase().contains(lowerQuery) ||
+          (community.description?.toLowerCase().contains(lowerQuery) ??
+              false) ||
           community.category.toLowerCase().contains(lowerQuery);
     }).toList();
   }

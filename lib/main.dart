@@ -10,12 +10,19 @@ import 'config/controllers/scan_controller.dart';
 import 'config/controllers/chat_controller.dart';
 import 'config/controllers/wallet_controller.dart';
 import 'config/controllers/community_controller.dart';
+import 'services/appwrite_service.dart';
 
 import 'config/views/auth/login_view.dart';
 import 'config/views/main/main_navigation.dart';
 import 'config/views/admin/admin_dashboard_view.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Appwrite before anything else
+  final appwrite = AppwriteService();
+  appwrite.initialize();
+
   runApp(const SeedScanApp());
 }
 
@@ -57,11 +64,38 @@ class SeedScanApp extends StatelessWidget {
   }
 }
 
-class EntryDecider extends StatelessWidget {
+class EntryDecider extends StatefulWidget {
   const EntryDecider({super.key});
 
   @override
+  State<EntryDecider> createState() => _EntryDeciderState();
+}
+
+class _EntryDeciderState extends State<EntryDecider> {
+  bool _initializing = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    final auth = Provider.of<AuthController>(context, listen: false);
+    await auth.initialize();
+    if (mounted) {
+      setState(() => _initializing = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_initializing) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     final auth = Provider.of<AuthController>(context);
 
     // Show login if not logged in

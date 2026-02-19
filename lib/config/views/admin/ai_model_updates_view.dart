@@ -7,6 +7,7 @@ class AIModelUpdatesView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('AI Model Control')),
       body: Padding(
@@ -14,13 +15,16 @@ class AIModelUpdatesView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Active Model: disease_classifier.tflite',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const Text('Version: 2.1.0 (Deployed 3 days ago)',
-                style: TextStyle(color: Colors.grey)),
+            Text('Active Model: disease_classifier.tflite',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: cs.onSurface)),
+            Text('Version: 2.1.0 (Deployed 3 days ago)',
+                style: TextStyle(color: cs.onSurface.withOpacity(0.6))),
             const SizedBox(height: 30),
-            _buildModelStat('Average Accuracy', '94.2%'),
-            _buildModelStat('Inference Time', '120ms'),
+            _buildModelStat(context, 'Average Accuracy', '94.2%'),
+            _buildModelStat(context, 'Inference Time', '120ms'),
             const Spacer(),
             CustomButton(
               onPressed: () {},
@@ -39,16 +43,16 @@ class AIModelUpdatesView extends StatelessWidget {
     );
   }
 
-  Widget _buildModelStat(String label, String value) {
+  Widget _buildModelStat(BuildContext context, String label, String value) {
+    final cs = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label),
+          Text(label, style: TextStyle(color: cs.onSurface)),
           Text(value,
-              style: const TextStyle(
-                  fontWeight: FontWeight.bold, color: Colors.green)),
+              style: TextStyle(fontWeight: FontWeight.bold, color: cs.primary)),
         ],
       ),
     );

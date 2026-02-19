@@ -5,9 +5,12 @@ class SystemLogsView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       appBar: AppBar(title: const Text('System Logs')),
-      backgroundColor: Colors.black,
+      backgroundColor: isDark ? cs.surface : const Color(0xFF1E1E2E),
       body: ListView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: 20,

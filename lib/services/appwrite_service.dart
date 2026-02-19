@@ -1,8 +1,9 @@
 // lib/services/appwrite_service.dart
 import 'package:appwrite/appwrite.dart';
+import '../config/appwrite_constants.dart';
 
-/// Shared Appwrite service for both main app and admin panel
-/// This service manages connections to Appwrite backend
+/// Shared Appwrite service for both main app and admin panel.
+/// Uses constants from [AppwriteConstants] for all IDs.
 class AppwriteService {
   static final AppwriteService _instance = AppwriteService._internal();
   factory AppwriteService() => _instance;
@@ -14,34 +15,63 @@ class AppwriteService {
   late Storage _storage;
   late Functions _functions;
   late Messaging _messaging;
+  bool _initialized = false;
 
-  // TODO: Replace with your actual Appwrite project details
-  static const String endpoint =
-      'https://cloud.appwrite.io/v1'; // Your Appwrite endpoint
-  static const String projectId = 'YOUR_PROJECT_ID'; // Your Project ID
-  static const String databaseId = 'YOUR_DATABASE_ID'; // Your Database ID
+  // ── Convenience aliases (backward-compat) ─────────────────────────────────
+  static const String endpoint = AppwriteConstants.endpoint;
+  static const String projectId = AppwriteConstants.projectId;
+  static const String databaseId = AppwriteConstants.databaseId;
 
-  // Collection IDs - Update these with your actual collection IDs
-  static const String usersCollectionId = 'users';
-  static const String communitiesCollectionId = 'communities';
-  static const String plantsCollectionId = 'plants';
-  static const String qrCodesCollectionId = 'qr_codes';
-  static const String transactionsCollectionId = 'transactions';
-  static const String notificationsCollectionId = 'notifications';
+  // Collection IDs – all 12 collections from the design doc
+  static const String usersCollectionId = AppwriteConstants.usersCollection;
+  static const String plantsCollectionId = AppwriteConstants.plantsCollection;
+  static const String drivesCollectionId = AppwriteConstants.drivesCollection;
+  static const String activityLogsCollectionId =
+      AppwriteConstants.activityLogsCollection;
+  static const String rewardsCollectionId = AppwriteConstants.rewardsCollection;
+  static const String communitiesCollectionId =
+      AppwriteConstants.communitiesCollection;
+  static const String communityMembersCollectionId =
+      AppwriteConstants.communityMembersCollection;
+  static const String communityPostsCollectionId =
+      AppwriteConstants.communityPostsCollection;
+  static const String communityCommentsCollectionId =
+      AppwriteConstants.communityCommentsCollection;
+  static const String communityLikesCollectionId =
+      AppwriteConstants.communityLikesCollection;
+  static const String notificationsCollectionId =
+      AppwriteConstants.notificationsCollection;
+  static const String userFcmTokensCollectionId =
+      AppwriteConstants.userFcmTokensCollection;
 
-  /// Initialize Appwrite client
+  // Storage bucket IDs
+  static const String plantImagesBucket = AppwriteConstants.plantImagesBucket;
+  static const String communityMediaBucket =
+      AppwriteConstants.communityMediaBucket;
+
+  // Cloud function IDs
+  static const String verifyActionFunctionId =
+      AppwriteConstants.verifyActionFunctionId;
+  static const String joinCommunityFunctionId =
+      AppwriteConstants.joinCommunityFunctionId;
+  static const String sendNotificationFunctionId =
+      AppwriteConstants.sendNotificationFunctionId;
+
+  /// Initialize Appwrite client – safe to call multiple times.
   void initialize() {
+    if (_initialized) return;
+
     _client = Client()
         .setEndpoint(endpoint)
         .setProject(projectId)
-        .setSelfSigned(
-            status: true); // Only for development with self-signed certificates
+        .setSelfSigned(status: true); // dev only
 
     _account = Account(_client);
     _databases = Databases(_client);
     _storage = Storage(_client);
     _functions = Functions(_client);
     _messaging = Messaging(_client);
+    _initialized = true;
   }
 
   // Getters for Appwrite services
@@ -51,6 +81,7 @@ class AppwriteService {
   Storage get storage => _storage;
   Functions get functions => _functions;
   Messaging get messaging => _messaging;
+  bool get isInitialized => _initialized;
 
   // === Authentication Methods ===
 
@@ -67,7 +98,7 @@ class AppwriteService {
     }
   }
 
-  /// Sign up new user
+  /// Sign up new user (Appwrite Auth)
   Future<dynamic> signUp({
     required String email,
     required String password,
@@ -83,6 +114,68 @@ class AppwriteService {
       return user;
     } catch (e) {
       rethrow;
+    }
+  }
+
+  /// Create a user profile document in the `users` collection.
+  /// Uses the Auth user's `$id` as the document ID so they match.
+  Future<dynamic> createUserDocument({
+    required String userId,
+    required String name,
+    required String username,
+    required String email,
+  }) async {
+    try {
+      return await _databases.createDocument(
+        databaseId: databaseId,
+        collectionId: usersCollectionId,
+        documentId: userId,
+        data: {
+          'name': name,
+          'username': username,
+          'email': email,
+          'wallet_balance': 0,
+          'current_streak': 0,
+          'joined_drives': [],
+          'created_at': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  /// Fetch the user profile document from the `users` collection.
+  Future<dynamic> getUserDocument(String userId) async {
+    try {
+      return await _databases.getDocument(
+        databaseId: databaseId,
+        collectionId: usersCollectionId,
+        documentId: userId,
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /// Look up a user document by username.
+  /// Returns the document if found, null otherwise.
+  Future<dynamic> getUserByUsername(String username) async {
+    try {
+      final result = await _databases.listDocuments(
+        databaseId: databaseId,
+        collectionId: usersCollectionId,
+        queries: [
+          Query.equal('username', username),
+          Query.limit(1),
+        ],
+      );
+      if (result.documents.isNotEmpty) {
+        return result.documents.first;
+      }
+      return null;
+    } catch (e) {
+      return null;
     }
   }
 
@@ -330,40 +423,51 @@ class AppwriteService {
     }
   }
 
-  /// Get QR code statistics
-  Future<Map<String, dynamic>> getQRStats() async {
+  /// Get drive statistics
+  Future<Map<String, dynamic>> getDriveStats() async {
     try {
-      final qrCodes = await getDocuments(collectionId: qrCodesCollectionId);
+      final drives = await getDocuments(collectionId: drivesCollectionId);
       return {
-        'totalGenerated': qrCodes.total ?? 0,
-        'scanned': 0, // Implement based on your schema
-        'unused': 0,
+        'totalDrives': drives.total ?? 0,
+        'activeDrives': 0,
+        'completedDrives': 0,
       };
     } catch (e) {
       return {
-        'totalGenerated': 0,
-        'scanned': 0,
-        'unused': 0,
+        'totalDrives': 0,
+        'activeDrives': 0,
+        'completedDrives': 0,
       };
     }
   }
 
-  /// Get coin/transaction statistics
+  /// Get activity log / coin statistics
   Future<Map<String, dynamic>> getCoinStats() async {
     try {
-      final transactions =
-          await getDocuments(collectionId: transactionsCollectionId);
+      final logs = await getDocuments(collectionId: activityLogsCollectionId);
       return {
-        'totalTransactions': transactions.total ?? 0,
-        'totalCoinsDistributed': 0, // Calculate from transactions
+        'totalActivities': logs.total ?? 0,
+        'totalCoinsDistributed': 0, // Sum from activity_logs.coins_awarded
         'avgCoinsPerUser': 0,
       };
     } catch (e) {
       return {
-        'totalTransactions': 0,
+        'totalActivities': 0,
         'totalCoinsDistributed': 0,
         'avgCoinsPerUser': 0,
       };
+    }
+  }
+
+  /// Get reward catalog statistics
+  Future<Map<String, dynamic>> getRewardStats() async {
+    try {
+      final rewards = await getDocuments(collectionId: rewardsCollectionId);
+      return {
+        'totalRewards': rewards.total ?? 0,
+      };
+    } catch (e) {
+      return {'totalRewards': 0};
     }
   }
 }

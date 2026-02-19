@@ -1,98 +1,75 @@
 // lib/models/user_model.dart
+/// Matches Appwrite collection: `users`
 
 class UserModel {
   final String id;
   final String name;
-  final String email;
   final String username;
-  final String? profileImage;
+  final String email;
+  final int walletBalance;
+  final int currentStreak;
+  final List<String> joinedDrives;
   final DateTime createdAt;
-  final DateTime? lastLogin;
-  final int plantCount;
-  final int coins;
-  final List<String> communityIds;
-  final bool isAdmin;
-  final bool isActive;
 
   UserModel({
     required this.id,
     required this.name,
+    this.username = '',
     required this.email,
-    required this.username,
-    this.profileImage,
+    this.walletBalance = 0,
+    this.currentStreak = 0,
+    this.joinedDrives = const [],
     required this.createdAt,
-    this.lastLogin,
-    this.plantCount = 0,
-    this.coins = 0,
-    this.communityIds = const [],
-    this.isAdmin = false,
-    this.isActive = true,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
       id: json['\$id'] ?? json['id'] ?? '',
       name: json['name'] ?? '',
-      email: json['email'] ?? '',
       username: json['username'] ?? '',
-      profileImage: json['profileImage'],
-      createdAt: DateTime.parse(json['createdAt'] ??
-          json['\$createdAt'] ??
-          DateTime.now().toIso8601String()),
-      lastLogin:
-          json['lastLogin'] != null ? DateTime.parse(json['lastLogin']) : null,
-      plantCount: json['plantCount'] ?? 0,
-      coins: json['coins'] ?? 0,
-      communityIds: List<String>.from(json['communityIds'] ?? []),
-      isAdmin: json['isAdmin'] ?? false,
-      isActive: json['isActive'] ?? true,
+      email: json['email'] ?? '',
+      walletBalance: json['wallet_balance'] ?? 0,
+      currentStreak: json['current_streak'] ?? 0,
+      joinedDrives: List<String>.from(json['joined_drives'] ?? []),
+      createdAt: DateTime.parse(
+        json['created_at'] ??
+            json['\$createdAt'] ??
+            DateTime.now().toIso8601String(),
+      ),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'id': id,
       'name': name,
-      'email': email,
       'username': username,
-      'profileImage': profileImage,
-      'createdAt': createdAt.toIso8601String(),
-      'lastLogin': lastLogin?.toIso8601String(),
-      'plantCount': plantCount,
-      'coins': coins,
-      'communityIds': communityIds,
-      'isAdmin': isAdmin,
-      'isActive': isActive,
+      'email': email,
+      'wallet_balance': walletBalance,
+      'current_streak': currentStreak,
+      'joined_drives': joinedDrives,
+      'created_at': createdAt.toIso8601String(),
     };
   }
 
   UserModel copyWith({
     String? id,
     String? name,
-    String? email,
     String? username,
-    String? profileImage,
+    String? email,
+    int? walletBalance,
+    int? currentStreak,
+    List<String>? joinedDrives,
     DateTime? createdAt,
-    DateTime? lastLogin,
-    int? plantCount,
-    int? coins,
-    List<String>? communityIds,
-    bool? isAdmin,
-    bool? isActive,
   }) {
     return UserModel(
       id: id ?? this.id,
       name: name ?? this.name,
-      email: email ?? this.email,
       username: username ?? this.username,
-      profileImage: profileImage ?? this.profileImage,
+      email: email ?? this.email,
+      walletBalance: walletBalance ?? this.walletBalance,
+      currentStreak: currentStreak ?? this.currentStreak,
+      joinedDrives: joinedDrives ?? this.joinedDrives,
       createdAt: createdAt ?? this.createdAt,
-      lastLogin: lastLogin ?? this.lastLogin,
-      plantCount: plantCount ?? this.plantCount,
-      coins: coins ?? this.coins,
-      communityIds: communityIds ?? this.communityIds,
-      isAdmin: isAdmin ?? this.isAdmin,
-      isActive: isActive ?? this.isActive,
     );
   }
 }

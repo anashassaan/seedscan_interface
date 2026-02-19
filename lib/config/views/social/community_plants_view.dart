@@ -251,7 +251,7 @@ class CommunityPlantsView extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                community.description,
+                community.description ?? '',
                 style: GoogleFonts.inter(
                   fontSize: 14,
                   color: cs.onSurface.withOpacity(0.8),
