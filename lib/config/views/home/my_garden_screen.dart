@@ -1,4 +1,5 @@
 // lib/config/views/home/my_garden_screen.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -10,6 +11,8 @@ import '../../controllers/auth_controller.dart';
 import '../common/plant_card.dart';
 import 'qr_scanner_screen.dart';
 import 'generate_qr_screen.dart';
+import '../../../services/database_service.dart';
+import '../../../models/my_garden_qr_model.dart';
 
 class MyGardenScreen extends StatefulWidget {
   const MyGardenScreen({super.key});
@@ -24,16 +27,45 @@ class _MyGardenScreenState extends State<MyGardenScreen>
   String _searchQuery = '';
   String _selectedFilter = 'All';
 
+  // Database integration
+  final DatabaseService _dbService = DatabaseService();
+  List<MyGardenQRModel> _myGardenQRCodes = [];
+  bool _isLoadingQRCodes = false;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        setState(() {});
+      }
+    });
+    _loadMyGardenQRCodes();
   }
 
   @override
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadMyGardenQRCodes() async {
+    final auth = Provider.of<AuthController>(context, listen: false);
+    final userId = auth.userId;
+    if (userId == null) return;
+
+    setState(() => _isLoadingQRCodes = true);
+    try {
+      final codes = await _dbService.listMyGardenQRCodes(userId);
+      setState(() {
+        _myGardenQRCodes = codes;
+        _isLoadingQRCodes = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading My Garden QR codes: $e');
+      setState(() => _isLoadingQRCodes = false);
+    }
   }
 
   @override
@@ -111,13 +143,15 @@ class _MyGardenScreenState extends State<MyGardenScreen>
             actions: [
               IconButton(
                 icon: const Icon(LucideIcons.qrCode),
-                onPressed: () {
-                  Navigator.push(
+                onPressed: () async {
+                  await Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (context) => const GenerateQRScreen(),
                     ),
                   );
+                  // Refresh QR codes list after returning
+                  _loadMyGardenQRCodes();
                 },
                 tooltip: 'Generate QR Code',
               ),
@@ -232,27 +266,31 @@ class _MyGardenScreenState extends State<MyGardenScreen>
                   Tab(text: 'All Plants'),
                   Tab(text: 'Healthy'),
                   Tab(text: 'Needs Care'),
+                  Tab(text: 'My QR Codes'),
                 ],
               ),
             ),
           ),
 
-          // Plants List
+          // Plants List / QR Codes List (based on tab)
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            sliver: filteredPlants.isEmpty
-                ? SliverToBoxAdapter(
-                    child: _buildEmptyState(context),
-                  )
-                : SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (context, index) {
-                        final plant = filteredPlants[index];
-                        return _buildPlantCard(context, plant, scanController);
-                      },
-                      childCount: filteredPlants.length,
-                    ),
-                  ),
+            sliver: _tabController.index == 3
+                ? _buildQRCodesSliver(cs)
+                : (filteredPlants.isEmpty
+                    ? SliverToBoxAdapter(
+                        child: _buildEmptyState(context),
+                      )
+                    : SliverList(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final plant = filteredPlants[index];
+                            return _buildPlantCard(
+                                context, plant, scanController);
+                          },
+                          childCount: filteredPlants.length,
+                        ),
+                      )),
           ),
 
           // Bottom Padding
@@ -319,6 +357,43 @@ class _MyGardenScreenState extends State<MyGardenScreen>
     );
   }
 
+  /// Smart image builder: uses Image.file for local paths, Image.network for URLs.
+  Widget _buildPlantImage(
+    String imagePath, {
+    double? width,
+    double? height,
+    required ColorScheme cs,
+  }) {
+    final isLocal = imagePath.startsWith('/') ||
+        imagePath.startsWith('C:') ||
+        imagePath.contains('\\');
+    if (isLocal && File(imagePath).existsSync()) {
+      return Image.file(
+        File(imagePath),
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        errorBuilder: (context, _, __) => _imagePlaceholder(width, height, cs),
+      );
+    }
+    return Image.network(
+      imagePath,
+      width: width,
+      height: height,
+      fit: BoxFit.cover,
+      errorBuilder: (context, _, __) => _imagePlaceholder(width, height, cs),
+    );
+  }
+
+  Widget _imagePlaceholder(double? width, double? height, ColorScheme cs) {
+    return Container(
+      width: width,
+      height: height,
+      color: cs.surfaceContainerHighest,
+      child: Icon(LucideIcons.flower2, size: 40, color: cs.onSurfaceVariant),
+    );
+  }
+
   Widget _buildPlantCard(
       BuildContext context, PlantModel plant, ScanController controller) {
     final cs = Theme.of(context).colorScheme;
@@ -343,21 +418,11 @@ class _MyGardenScreenState extends State<MyGardenScreen>
                 tag: 'plant_${plant.id}',
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
-                  child: Image.network(
+                  child: _buildPlantImage(
                     plant.image,
                     width: 80,
                     height: 80,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, _, __) => Container(
-                      width: 80,
-                      height: 80,
-                      color: cs.surfaceVariant,
-                      child: Icon(
-                        LucideIcons.flower2,
-                        size: 40,
-                        color: cs.onSurfaceVariant,
-                      ),
-                    ),
+                    cs: cs,
                   ),
                 ),
               ),
@@ -496,6 +561,507 @@ class _MyGardenScreenState extends State<MyGardenScreen>
     );
   }
 
+  Widget _buildQRCodesSliver(ColorScheme cs) {
+    if (_isLoadingQRCodes) {
+      return const SliverToBoxAdapter(
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(40),
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      );
+    }
+
+    if (_myGardenQRCodes.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(40),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  LucideIcons.qrCode,
+                  size: 80,
+                  color: cs.onSurface.withOpacity(0.2),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'No QR Codes Yet',
+                  style: GoogleFonts.poppins(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface.withOpacity(0.6),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Generate QR codes for your plants\nand seeds to track them!',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: cs.onSurface.withOpacity(0.4),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (context) => const GenerateQRScreen()),
+                    );
+                    _loadMyGardenQRCodes();
+                  },
+                  icon: const Icon(LucideIcons.qrCode),
+                  label: const Text('Generate QR Code'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          final qr = _myGardenQRCodes[index];
+          return _buildQRCodeCard(context, qr, cs);
+        },
+        childCount: _myGardenQRCodes.length,
+      ),
+    );
+  }
+
+  Widget _buildQRCodeCard(
+      BuildContext context, MyGardenQRModel qr, ColorScheme cs) {
+    final isPlant = qr.qrType == 'Plant';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      elevation: 2,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(
+          color: cs.outlineVariant.withOpacity(0.3),
+        ),
+      ),
+      child: InkWell(
+        onTap: () => _showQRCodeDetails(context, qr),
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              // Icon
+              Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  color: isPlant
+                      ? Colors.teal.withOpacity(0.1)
+                      : Colors.amber.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  isPlant ? LucideIcons.flower2 : LucideIcons.sprout,
+                  size: 28,
+                  color: isPlant ? Colors.teal : Colors.amber.shade700,
+                ),
+              ),
+              const SizedBox(width: 16),
+
+              // Info
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            qr.plantName,
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurface,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isPlant
+                                ? Colors.teal.withOpacity(0.1)
+                                : Colors.amber.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            qr.qrType,
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color:
+                                  isPlant ? Colors.teal : Colors.amber.shade700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      qr.localName,
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontStyle: FontStyle.italic,
+                        color: cs.onSurface.withOpacity(0.5),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(LucideIcons.sun,
+                            size: 13, color: cs.onSurface.withOpacity(0.4)),
+                        const SizedBox(width: 4),
+                        Text(
+                          qr.bestSeason,
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: cs.onSurface.withOpacity(0.4),
+                          ),
+                        ),
+                        if (isPlant && qr.plantAge != null) ...[
+                          const SizedBox(width: 12),
+                          Icon(LucideIcons.clock,
+                              size: 13, color: cs.onSurface.withOpacity(0.4)),
+                          const SizedBox(width: 4),
+                          Text(
+                            qr.plantAge!,
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              color: cs.onSurface.withOpacity(0.4),
+                            ),
+                          ),
+                        ],
+                        const Spacer(),
+                        Icon(
+                          LucideIcons.chevronRight,
+                          size: 16,
+                          color: cs.onSurface.withOpacity(0.3),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showQRCodeDetails(BuildContext context, MyGardenQRModel qr) {
+    final cs = Theme.of(context).colorScheme;
+    final isPlant = qr.qrType == 'Plant';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          maxChildSize: 0.9,
+          minChildSize: 0.5,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: BoxDecoration(
+                color: cs.surface,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
+                ),
+              ),
+              child: ListView(
+                controller: scrollController,
+                padding: const EdgeInsets.all(24),
+                children: [
+                  // Handle bar
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: cs.onSurface.withOpacity(0.3),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // MY GARDEN badge
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade100,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.green.shade400),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(LucideIcons.home,
+                              size: 14, color: Colors.green.shade800),
+                          const SizedBox(width: 6),
+                          Text(
+                            'MY GARDEN',
+                            style: GoogleFonts.poppins(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.green.shade800,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Plant Name
+                  Text(
+                    qr.plantName,
+                    style: GoogleFonts.poppins(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: cs.onSurface,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    qr.localName,
+                    style: GoogleFonts.poppins(
+                      fontSize: 16,
+                      fontStyle: FontStyle.italic,
+                      color: cs.onSurface.withOpacity(0.6),
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Type & Season badges
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isPlant
+                              ? Colors.teal.withOpacity(0.1)
+                              : Colors.amber.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isPlant
+                                  ? LucideIcons.flower2
+                                  : LucideIcons.sprout,
+                              size: 16,
+                              color:
+                                  isPlant ? Colors.teal : Colors.amber.shade700,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              qr.qrType,
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: isPlant
+                                    ? Colors.teal
+                                    : Colors.amber.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: cs.primaryContainer,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          qr.category,
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: cs.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Details
+                  _qrDetailRow(context,
+                      icon: LucideIcons.hash,
+                      label: 'Unique ID',
+                      value: qr.uniqueCode),
+                  _qrDetailRow(context,
+                      icon: LucideIcons.sun,
+                      label: 'Best Season',
+                      value: qr.bestSeason),
+                  if (isPlant && qr.plantAge != null)
+                    _qrDetailRow(context,
+                        icon: LucideIcons.clock,
+                        label: 'Plant Age',
+                        value: qr.plantAge!),
+                  _qrDetailRow(context,
+                      icon: LucideIcons.home,
+                      label: 'Garden ID',
+                      value: qr.gardenId),
+                  _qrDetailRow(context,
+                      icon: LucideIcons.user,
+                      label: 'Owner',
+                      value: qr.ownerName),
+                  if (qr.notes.isNotEmpty)
+                    _qrDetailRow(context,
+                        icon: LucideIcons.fileText,
+                        label: 'Notes',
+                        value: qr.notes),
+                  _qrDetailRow(context,
+                      icon: LucideIcons.calendar,
+                      label: 'Created',
+                      value: qr.createdAt.toString().substring(0, 16)),
+
+                  const SizedBox(height: 24),
+
+                  // Delete button
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Delete QR Code'),
+                          content: Text(
+                              'Are you sure you want to delete "${qr.plantName}" QR code?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Delete',
+                                  style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        try {
+                          await _dbService.deleteMyGardenQR(qr.id);
+                          if (context.mounted) Navigator.pop(context);
+                          _loadMyGardenQRCodes();
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error deleting: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      }
+                    },
+                    icon: const Icon(LucideIcons.trash2, color: Colors.red),
+                    label: const Text('Delete QR Code',
+                        style: TextStyle(color: Colors.red)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      minimumSize: const Size(double.infinity, 48),
+                      side: const BorderSide(color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _qrDetailRow(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: cs.primaryContainer.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, size: 20, color: cs.primary),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  color: cs.onSurface.withOpacity(0.6),
+                ),
+              ),
+              Text(
+                value,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: cs.onSurface,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showSearchDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -609,11 +1175,11 @@ class _MyGardenScreenState extends State<MyGardenScreen>
                     tag: 'plant_${plant.id}',
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(20),
-                      child: Image.network(
+                      child: _buildPlantImage(
                         plant.image,
                         height: 250,
                         width: double.infinity,
-                        fit: BoxFit.cover,
+                        cs: cs,
                       ),
                     ),
                   ),
@@ -987,18 +1553,28 @@ class _MyGardenScreenState extends State<MyGardenScreen>
                           Navigator.pop(context);
                           final XFile? image = await picker.pickImage(
                             source: ImageSource.camera,
+                            maxWidth: 1200,
+                            maxHeight: 1200,
+                            imageQuality: 85,
                           );
                           if (image != null) {
-                            await scanController.updatePlantImage(
-                                plant.id, image.path);
+                            final result = await scanController
+                                .updatePlantImage(plant.id, image.path);
                             if (context.mounted) {
+                              final now = DateTime.now();
+                              final timeStr =
+                                  '${now.day}/${now.month}/${now.year} ${now.hour}:${now.minute.toString().padLeft(2, '0')}';
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'Plant image updated successfully!',
+                                    result['success'] == true
+                                        ? 'Plant image updated & saved to database at $timeStr'
+                                        : 'Image updated locally (upload failed: ${result['error']})',
                                     style: GoogleFonts.poppins(),
                                   ),
-                                  backgroundColor: Colors.green,
+                                  backgroundColor: result['success'] == true
+                                      ? Colors.green
+                                      : Colors.orange,
                                 ),
                               );
                             }
@@ -1015,16 +1591,23 @@ class _MyGardenScreenState extends State<MyGardenScreen>
                             source: ImageSource.gallery,
                           );
                           if (image != null) {
-                            await scanController.updatePlantImage(
-                                plant.id, image.path);
+                            final result = await scanController
+                                .updatePlantImage(plant.id, image.path);
                             if (context.mounted) {
+                              final now = DateTime.now();
+                              final timeStr =
+                                  '${now.day}/${now.month}/${now.year} ${now.hour}:${now.minute.toString().padLeft(2, '0')}';
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'Plant image updated successfully!',
+                                    result['success'] == true
+                                        ? 'Plant image updated & saved to database at $timeStr'
+                                        : 'Image updated locally (upload failed: ${result['error']})',
                                     style: GoogleFonts.poppins(),
                                   ),
-                                  backgroundColor: Colors.green,
+                                  backgroundColor: result['success'] == true
+                                      ? Colors.green
+                                      : Colors.orange,
                                 ),
                               );
                             }

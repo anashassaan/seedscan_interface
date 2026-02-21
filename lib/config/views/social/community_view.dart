@@ -213,7 +213,7 @@ class _CommunityCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    community.description,
+                    community.description ?? 'No description available',
                     style: GoogleFonts.inter(
                       fontSize: 14,
                       color: cs.onSurface.withOpacity(0.7),

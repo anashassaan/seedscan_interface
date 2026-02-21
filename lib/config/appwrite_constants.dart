@@ -22,6 +22,7 @@ class AppwriteConstants {
   static const String communityLikesCollection = 'community_likes';
   static const String notificationsCollection = 'notifications';
   static const String userFcmTokensCollection = 'user_fcm_tokens';
+  static const String myGardenQrCollection = 'my_garden_qr_codes';
 
   // ── Storage Bucket IDs ────────────────────────────────────────────────────
   static const String plantImagesBucket = 'plant_images';

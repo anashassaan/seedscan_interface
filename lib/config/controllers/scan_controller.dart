@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:image/image.dart' as img;
 import '../../services/apple_detection_service.dart';
 import '../../services/disease_classifier_service.dart';
+import '../../services/database_service.dart';
 
 class ScanController extends ChangeNotifier {
   ScanController() {
@@ -20,49 +21,7 @@ class ScanController extends ChangeNotifier {
   final List<PlantModel> _myPlants = [];
 
   void _initializePlants() {
-    // TODO: DUMMY DATA - These are placeholder images for demo purposes only
-    // In production, replace all 'image' URLs with user-uploaded plant photos
-    _myPlants.addAll([
-      PlantModel(
-        id: '402',
-        name: 'Golden Pothos',
-        scientificName: 'Epipremnum aureum',
-        image:
-            'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=800&q=60', // PLACEHOLDER - Replace with user upload
-        status: 'Healthy',
-        statusColor: Colors.green,
-        lastScan: '2 days ago',
-        location: 'Garden, Near Window',
-        latitude: 31.5204,
-        longitude: 74.3587,
-      ),
-      PlantModel(
-        id: '278',
-        name: 'Fiddle Leaf Fig',
-        scientificName: 'Ficus lyrata',
-        image:
-            'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=800&q=60',
-        status: 'Needs Water',
-        statusColor: Colors.orange,
-        lastScan: '5 hours ago',
-        location: 'Living Room, Corner',
-        latitude: 31.5200,
-        longitude: 74.3580,
-      ),
-      PlantModel(
-        id: '119',
-        name: 'Snake Plant',
-        scientificName: 'Dracaena trifasciata',
-        image:
-            'https://images.unsplash.com/photo-1497034825429-c343d7c6a68f?auto=format&fit=crop&w=800&q=60',
-        status: 'Healthy',
-        statusColor: Colors.green,
-        lastScan: '1 week ago',
-        location: 'Bedroom, Nightstand',
-        latitude: 31.5210,
-        longitude: 74.3595,
-      ),
-    ]);
+    // Plants list starts empty — populated from DB or QR scan
   }
 
   // Camera controller from mobile_scanner (works on mobile & desktop)
@@ -160,31 +119,21 @@ class ScanController extends ChangeNotifier {
     }
   }
 
-  // Handle QR barcode scanned
+  // Handle QR barcode scanned — lightweight, non-blocking.
   Future<Map<String, dynamic>> handleQr(String code) async {
-    if (_isProcessing)
-      return {'success': false, 'message': 'Already processing'};
-    _isProcessing = true;
-    notifyListeners();
-
-    // Capture location when QR is scanned
-    final position = await getCurrentLocation();
-    if (position != null) {
-      _lastLatitude = position.latitude;
-      _lastLongitude = position.longitude;
-    }
-
-    // debounce / simulate small lookup
-    await Future<void>.delayed(const Duration(milliseconds: 600));
     _lastQr = code;
     _lastScanTime = DateTime.now();
-
-    // simulate a little additional processing
-    await Future<void>.delayed(const Duration(milliseconds: 400));
-    _isProcessing = false;
     notifyListeners();
 
-    // Return the QR code and location data
+    // Capture location in the background (don't block detection)
+    getCurrentLocation().then((position) {
+      if (position != null) {
+        _lastLatitude = position.latitude;
+        _lastLongitude = position.longitude;
+        notifyListeners();
+      }
+    }).catchError((_) {});
+
     return {
       'success': true,
       'qrCode': code,
@@ -250,12 +199,92 @@ class ScanController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Update plant with new image
-  Future<void> updatePlantImage(String plantId, String imagePath) async {
-    // In a real app, this would upload the image and update the database
-    // For now, we'll just notify listeners
-    print('Updating plant $plantId with new image: $imagePath');
-    notifyListeners();
+  // Update plant with new image — uploads to Appwrite and updates DB + in-memory list
+  Future<Map<String, dynamic>> updatePlantImage(
+      String plantId, String imagePath) async {
+    final dbService = DatabaseService();
+    final now = DateTime.now();
+    final timeLabel =
+        '${now.day}/${now.month}/${now.year} ${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+
+    try {
+      // 1. Upload image to Appwrite storage
+      final fileId = await dbService.uploadPlantImage(imagePath);
+      final imageUrl = dbService.getPlantImageUrl(fileId);
+
+      // 2. Try to update in the my_garden_qr_codes collection
+      try {
+        await dbService.updateMyGardenPlantImage(
+          docId: plantId,
+          filePath: imagePath,
+        );
+      } catch (e) {
+        debugPrint('my_garden_qr update failed (may not exist): $e');
+      }
+
+      // 3. Try to update in the plants collection
+      try {
+        await dbService.updatePlant(plantId, {
+          'image_url': imageUrl,
+        });
+      } catch (e) {
+        debugPrint('plants collection update failed: $e');
+      }
+
+      // 4. Update in-memory plant list
+      final plantIndex = _myPlants.indexWhere((plant) => plant.id == plantId);
+      if (plantIndex != -1) {
+        final plant = _myPlants[plantIndex];
+        _myPlants[plantIndex] = PlantModel(
+          id: plant.id,
+          name: plant.name,
+          scientificName: plant.scientificName,
+          image: imageUrl,
+          status: plant.status,
+          statusColor: plant.statusColor,
+          lastScan: timeLabel,
+          location: plant.location,
+          latitude: plant.latitude,
+          longitude: plant.longitude,
+        );
+      }
+
+      debugPrint('Plant $plantId image updated: $imageUrl at $timeLabel');
+      notifyListeners();
+
+      return {
+        'success': true,
+        'fileId': fileId,
+        'imageUrl': imageUrl,
+        'updatedAt': now.toIso8601String(),
+      };
+    } catch (e) {
+      debugPrint('Error updating plant image: $e');
+
+      // Fallback: at least update local image path in-memory
+      final plantIndex = _myPlants.indexWhere((plant) => plant.id == plantId);
+      if (plantIndex != -1) {
+        final plant = _myPlants[plantIndex];
+        _myPlants[plantIndex] = PlantModel(
+          id: plant.id,
+          name: plant.name,
+          scientificName: plant.scientificName,
+          image: imagePath,
+          status: plant.status,
+          statusColor: plant.statusColor,
+          lastScan: timeLabel,
+          location: plant.location,
+          latitude: plant.latitude,
+          longitude: plant.longitude,
+        );
+      }
+      notifyListeners();
+
+      return {
+        'success': false,
+        'error': e.toString(),
+      };
+    }
   }
 
   // Update plant location with new GPS coordinates
@@ -470,6 +499,12 @@ class ScanController extends ChangeNotifier {
   // Simple list of plants (mock). Used by dashboard.
   List<PlantModel> getMyPlants() {
     return _myPlants;
+  }
+
+  /// Add a plant to the garden list (from QR scan + photo + GPS).
+  void addPlantToGarden(PlantModel plant) {
+    _myPlants.insert(0, plant);
+    notifyListeners();
   }
 
   // Reset results

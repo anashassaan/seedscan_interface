@@ -1,4 +1,5 @@
 // lib/services/database_service.dart
+import 'dart:convert';
 import 'package:appwrite/appwrite.dart';
 import '../config/appwrite_constants.dart';
 import '../models/user_model.dart';
@@ -7,6 +8,7 @@ import '../models/community_model.dart';
 import '../models/transaction_model.dart'; // ActivityLog
 import '../models/qr_code_model.dart'; // DriveModel, RewardModel, UserFcmToken
 import '../models/notification_model.dart';
+import '../models/my_garden_qr_model.dart';
 import 'appwrite_service.dart';
 
 /// High-level, typed database helper that sits on top of [AppwriteService].
@@ -389,7 +391,7 @@ class DatabaseService {
 
   Future<List<CommunityPost>> listPosts(String communityId,
       {List<String>? queries}) async {
-    final q = [
+    final q = <String>[
       Query.equal('community_id', communityId),
       Query.orderDesc('created_at'),
       ...(queries ?? []),
@@ -590,6 +592,226 @@ class DatabaseService {
       },
     );
     return UserFcmToken.fromJson(doc.data);
+  }
+
+  // ---------------------------------------------------------------------------
+  // MY GARDEN QR CODES
+  // ---------------------------------------------------------------------------
+
+  /// Create a My Garden QR code entry.
+  Future<MyGardenQRModel> createMyGardenQR({
+    required String uniqueCode,
+    required String plantName,
+    required String localName,
+    required String category,
+    required String bestSeason,
+    required String qrType,
+    String? plantAge,
+    String notes = '',
+    required String ownerId,
+    required String ownerName,
+    String ownerEmail = '',
+    required String gardenId,
+    double locationLat = 0.0,
+    double locationLong = 0.0,
+    String? imageFileId,
+    String? imageUrl,
+    DateTime? plantedAt,
+  }) async {
+    final now = DateTime.now();
+    final List<String> imageHistory = [];
+    if (imageFileId != null && imageUrl != null) {
+      imageHistory.add(jsonEncode({
+        'file_id': imageFileId,
+        'url': imageUrl,
+        'updated_at': (plantedAt ?? now).toIso8601String(),
+      }));
+    }
+    final doc = await _appwrite.createDocument(
+      collectionId: AppwriteConstants.myGardenQrCollection,
+      data: {
+        'unique_code': uniqueCode,
+        'plant_name': plantName,
+        'local_name': localName,
+        'category': category,
+        'best_season': bestSeason,
+        'qr_type': qrType,
+        'plant_age': plantAge,
+        'notes': notes,
+        'owner_id': ownerId,
+        'owner_name': ownerName,
+        'owner_email': ownerEmail,
+        'garden_id': gardenId,
+        'source': 'my_garden',
+        'created_at': now.toIso8601String(),
+        'location_lat': locationLat,
+        'location_long': locationLong,
+        'image_file_id': imageFileId,
+        'image_url': imageUrl,
+        'planted_at': (plantedAt ?? now).toIso8601String(),
+        'image_history': imageHistory,
+      },
+    );
+    return MyGardenQRModel.fromJson(doc.data);
+  }
+
+  /// Get a single My Garden QR code by document ID.
+  Future<MyGardenQRModel?> getMyGardenQR(String docId) async {
+    try {
+      final doc = await _appwrite.getDocument(
+        collectionId: AppwriteConstants.myGardenQrCollection,
+        documentId: docId,
+      );
+      return MyGardenQRModel.fromJson(doc.data);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// List all My Garden QR codes for a given user.
+  Future<List<MyGardenQRModel>> listMyGardenQRCodes(String userId) async {
+    final res = await _appwrite.getDocuments(
+      collectionId: AppwriteConstants.myGardenQrCollection,
+      queries: [
+        Query.equal('owner_id', userId),
+        Query.orderDesc('created_at'),
+      ],
+    );
+    return (res.documents as List)
+        .map((d) => MyGardenQRModel.fromJson(d.data))
+        .toList();
+  }
+
+  /// Find a My Garden QR code by its unique code (e.g. MYGARDEN-...).
+  Future<MyGardenQRModel?> findMyGardenQRByUniqueCode(String uniqueCode) async {
+    try {
+      final res = await _appwrite.getDocuments(
+        collectionId: AppwriteConstants.myGardenQrCollection,
+        queries: <String>[
+          Query.equal('unique_code', uniqueCode),
+          Query.limit(1),
+        ],
+      );
+      if (res.documents.isNotEmpty) {
+        return MyGardenQRModel.fromJson(res.documents.first.data);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Check if a QR code with this unique code already exists for a given user.
+  Future<bool> qrExistsForUser(String uniqueCode, String userId) async {
+    try {
+      final res = await _appwrite.getDocuments(
+        collectionId: AppwriteConstants.myGardenQrCollection,
+        queries: <String>[
+          Query.equal('unique_code', uniqueCode),
+          Query.equal('owner_id', userId),
+          Query.limit(1),
+        ],
+      );
+      return res.documents.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Clone / add a scanned QR code into the current user's garden.
+  Future<MyGardenQRModel> addScannedQRToMyGarden({
+    required MyGardenQRModel originalQr,
+    required String newOwnerId,
+    required String newOwnerName,
+    required String newOwnerEmail,
+    required String newGardenId,
+    double locationLat = 0.0,
+    double locationLong = 0.0,
+    String? imageFileId,
+    String? imageUrl,
+    DateTime? plantedAt,
+  }) async {
+    final newUniqueCode =
+        'MYGARDEN-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}-${(DateTime.now().millisecondsSinceEpoch % 10000).toString().padLeft(4, '0')}';
+    return createMyGardenQR(
+      uniqueCode: newUniqueCode,
+      plantName: originalQr.plantName,
+      localName: originalQr.localName,
+      category: originalQr.category,
+      bestSeason: originalQr.bestSeason,
+      qrType: originalQr.qrType,
+      plantAge: originalQr.plantAge,
+      notes:
+          'Scanned from ${originalQr.ownerName}\'s garden (${originalQr.uniqueCode})',
+      ownerId: newOwnerId,
+      ownerName: newOwnerName,
+      ownerEmail: newOwnerEmail,
+      gardenId: newGardenId,
+      locationLat: locationLat,
+      locationLong: locationLong,
+      imageFileId: imageFileId,
+      imageUrl: imageUrl,
+      plantedAt: plantedAt,
+    );
+  }
+
+  /// Delete a My Garden QR code.
+  Future<void> deleteMyGardenQR(String docId) async {
+    await _appwrite.deleteDocument(
+      collectionId: AppwriteConstants.myGardenQrCollection,
+      documentId: docId,
+    );
+  }
+
+  /// Update a My Garden plant's image in the database (upload + update doc).
+  /// Returns the updated image URL.
+  Future<Map<String, String>> updateMyGardenPlantImage({
+    required String docId,
+    required String filePath,
+  }) async {
+    // 1. Upload image to Appwrite storage
+    final fileId = await uploadPlantImage(filePath);
+    final url = getPlantImageUrl(fileId);
+    final now = DateTime.now().toIso8601String();
+
+    // 2. Get the existing document to append to image_history
+    final existing = await getMyGardenQR(docId);
+    final List<String> history =
+        existing?.imageHistory.map((e) => jsonEncode(e)).toList() ?? [];
+    history.add(jsonEncode({
+      'file_id': fileId,
+      'url': url,
+      'updated_at': now,
+    }));
+
+    // 3. Update the document with new image info
+    await _appwrite.updateDocument(
+      collectionId: AppwriteConstants.myGardenQrCollection,
+      documentId: docId,
+      data: {
+        'image_file_id': fileId,
+        'image_url': url,
+        'image_history': history,
+      },
+    );
+
+    return {'fileId': fileId, 'url': url, 'updatedAt': now};
+  }
+
+  /// Update a My Garden plant's location in the database.
+  Future<void> updateMyGardenPlantLocation({
+    required String docId,
+    required double lat,
+    required double lng,
+  }) async {
+    await _appwrite.updateDocument(
+      collectionId: AppwriteConstants.myGardenQrCollection,
+      documentId: docId,
+      data: {
+        'location_lat': lat,
+        'location_long': lng,
+      },
+    );
   }
 
   // ---------------------------------------------------------------------------

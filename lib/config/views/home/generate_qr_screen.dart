@@ -16,6 +16,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/auth_controller.dart';
+import '../../../services/database_service.dart';
+import '../../../models/my_garden_qr_model.dart';
 
 class GenerateQRScreen extends StatefulWidget {
   const GenerateQRScreen({super.key});
@@ -30,12 +32,17 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
 
   // Form fields
   final _plantNameController = TextEditingController();
-  final _scientificNameController = TextEditingController();
+  final _localNameController = TextEditingController();
   final _notesController = TextEditingController();
+  final _plantAgeController = TextEditingController();
 
   String _selectedCategory = 'Tree';
+  String _selectedSeason = 'Spring';
+  String _selectedQrType = 'Seed'; // 'Seed' or 'Plant'
   bool _isGenerating = false;
   bool _qrGenerated = false;
+  bool _savedToDb = false;
+  bool _isSavingToDb = false;
   String _generatedQRData = '';
   String _uniqueId = '';
 
@@ -49,21 +56,32 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
     'Other'
   ];
 
+  final List<String> _seasons = [
+    'Spring',
+    'Summer',
+    'Autumn',
+    'Winter',
+    'All Year',
+  ];
+
+  final DatabaseService _dbService = DatabaseService();
+
   @override
   void dispose() {
     _plantNameController.dispose();
-    _scientificNameController.dispose();
+    _localNameController.dispose();
     _notesController.dispose();
+    _plantAgeController.dispose();
     super.dispose();
   }
 
   String _generateUniqueId() {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final random = (timestamp % 10000).toString().padLeft(4, '0');
-    return 'PLT-${timestamp.toString().substring(8)}-$random';
+    return 'MYGARDEN-${timestamp.toString().substring(5)}-$random';
   }
 
-  void _generateQRCode() {
+  Future<void> _generateQRCode() async {
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isGenerating = true;
@@ -72,26 +90,67 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
       final auth = Provider.of<AuthController>(context, listen: false);
       _uniqueId = _generateUniqueId();
 
-      final qrData = {
-        'id': _uniqueId,
-        'plantName': _plantNameController.text,
-        'scientificName': _scientificNameController.text,
-        'category': _selectedCategory,
-        'notes': _notesController.text,
-        'owner': auth.userName,
-        'ownerEmail': auth.userEmail ?? '',
-        'createdAt': DateTime.now().toIso8601String(),
-        'gardenId': 'GARDEN-${auth.userHandle.toUpperCase()}',
-      };
+      final gardenId = 'GARDEN-${auth.userHandle.toUpperCase()}';
 
-      _generatedQRData = jsonEncode(qrData);
+      final qrModel = MyGardenQRModel(
+        id: '',
+        uniqueCode: _uniqueId,
+        plantName: _plantNameController.text.trim(),
+        localName: _localNameController.text.trim(),
+        category: _selectedCategory,
+        bestSeason: _selectedSeason,
+        qrType: _selectedQrType,
+        plantAge:
+            _selectedQrType == 'Plant' ? _plantAgeController.text.trim() : null,
+        notes: _notesController.text.trim(),
+        ownerId: auth.userId ?? '',
+        ownerName: auth.userName,
+        ownerEmail: auth.userEmail ?? '',
+        gardenId: gardenId,
+        source: 'my_garden',
+        createdAt: DateTime.now(),
+      );
 
-      Future.delayed(const Duration(milliseconds: 500), () {
-        setState(() {
-          _isGenerating = false;
-          _qrGenerated = true;
-        });
+      _generatedQRData = jsonEncode(qrModel.toQrPayload());
+
+      setState(() {
+        _isGenerating = false;
+        _qrGenerated = true;
+        _savedToDb = false;
       });
+    }
+  }
+
+  /// Upload / save the generated QR code to the database explicitly.
+  Future<void> _uploadToDatabase() async {
+    final auth = Provider.of<AuthController>(context, listen: false);
+    final gardenId = 'GARDEN-${auth.userHandle.toUpperCase()}';
+
+    setState(() => _isSavingToDb = true);
+    try {
+      await _dbService.createMyGardenQR(
+        uniqueCode: _uniqueId,
+        plantName: _plantNameController.text.trim(),
+        localName: _localNameController.text.trim(),
+        category: _selectedCategory,
+        bestSeason: _selectedSeason,
+        qrType: _selectedQrType,
+        plantAge:
+            _selectedQrType == 'Plant' ? _plantAgeController.text.trim() : null,
+        notes: _notesController.text.trim(),
+        ownerId: auth.userId ?? '',
+        ownerName: auth.userName,
+        ownerEmail: auth.userEmail ?? '',
+        gardenId: gardenId,
+      );
+      setState(() {
+        _isSavingToDb = false;
+        _savedToDb = true;
+      });
+      _showSuccessDialog('QR Code uploaded to your My Garden database!');
+    } catch (e) {
+      setState(() => _isSavingToDb = false);
+      _showErrorDialog('Error uploading QR Code: $e');
     }
   }
 
@@ -107,7 +166,7 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
 
       // Save to temporary file first
       final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/plant_qr_$_uniqueId.png');
+      final file = File('${tempDir.path}/mygarden_qr_$_uniqueId.png');
       await file.writeAsBytes(pngBytes);
 
       // Save to gallery using gal package
@@ -156,10 +215,28 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
                 pw.Header(
                   level: 0,
                   child: pw.Text(
-                    'Plant QR Code',
+                    'My Garden - Plant QR Code',
                     style: pw.TextStyle(
                       fontSize: 28,
                       fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                ),
+                pw.SizedBox(height: 10),
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 6),
+                  decoration: pw.BoxDecoration(
+                    color: PdfColors.green50,
+                    borderRadius: pw.BorderRadius.circular(8),
+                    border: pw.Border.all(color: PdfColors.green),
+                  ),
+                  child: pw.Text(
+                    'Source: MY GARDEN  |  Type: $_selectedQrType',
+                    style: pw.TextStyle(
+                      fontSize: 12,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.green900,
                     ),
                   ),
                 ),
@@ -191,9 +268,12 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
                 pw.SizedBox(height: 15),
                 _buildPdfField('Unique ID', _uniqueId),
                 _buildPdfField('Plant Name', _plantNameController.text),
-                _buildPdfField(
-                    'Scientific Name', _scientificNameController.text),
+                _buildPdfField('Local Name', _localNameController.text),
                 _buildPdfField('Category', _selectedCategory),
+                _buildPdfField('Best Season', _selectedSeason),
+                _buildPdfField('QR Type', _selectedQrType),
+                if (_selectedQrType == 'Plant')
+                  _buildPdfField('Plant Age', _plantAgeController.text),
                 _buildPdfField('Notes', _notesController.text),
                 pw.SizedBox(height: 10),
                 pw.Divider(),
@@ -206,7 +286,7 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
                 pw.Spacer(),
                 pw.Center(
                   child: pw.Text(
-                    'SeedScan - AI-Powered Plant Management',
+                    'SeedScan - AI-Powered Plant Management | My Garden QR',
                     style: const pw.TextStyle(
                       fontSize: 10,
                       color: PdfColors.grey,
@@ -220,7 +300,7 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
       );
 
       final output = await getTemporaryDirectory();
-      final file = File('${output.path}/plant_qr_$_uniqueId.pdf');
+      final file = File('${output.path}/mygarden_qr_$_uniqueId.pdf');
       await file.writeAsBytes(await pdf.save());
 
       setState(() => _isGenerating = false);
@@ -228,7 +308,7 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
       // Share the PDF
       await Share.shareXFiles(
         [XFile(file.path)],
-        subject: 'Plant QR Code - $_uniqueId',
+        subject: 'My Garden QR Code - $_uniqueId',
         text: 'Plant: ${_plantNameController.text}',
       );
 
@@ -308,7 +388,7 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(
-          'Generate Plant QR Code',
+          'My Garden QR Code',
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
         ),
         backgroundColor: cs.primary,
@@ -343,14 +423,14 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Create Plant QR Code',
+                          'My Garden QR Code',
                           style: GoogleFonts.poppins(
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         Text(
-                          'Fill in the details to generate a unique QR code for your plant',
+                          'Generate a unique QR code for your personal garden plant or seed',
                           style: GoogleFonts.poppins(
                             fontSize: 12,
                             color: cs.onSurface.withOpacity(0.6),
@@ -363,6 +443,77 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
               ),
             ),
             const SizedBox(height: 24),
+
+            // ── QR Type (Seed / Plant) ─────────────────────────
+            Text(
+              'QR Code For *',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildTypeChip(
+                    label: 'Seed',
+                    icon: LucideIcons.sprout,
+                    isSelected: _selectedQrType == 'Seed',
+                    cs: cs,
+                    onTap: () {
+                      setState(() {
+                        _selectedQrType = 'Seed';
+                        _plantAgeController.clear();
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildTypeChip(
+                    label: 'Plant',
+                    icon: LucideIcons.flower2,
+                    isSelected: _selectedQrType == 'Plant',
+                    cs: cs,
+                    onTap: () {
+                      setState(() => _selectedQrType = 'Plant');
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // ── Plant Age (only when type = Plant) ──────────────
+            if (_selectedQrType == 'Plant') ...[
+              Text(
+                'Plant Age *',
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _plantAgeController,
+                decoration: InputDecoration(
+                  hintText: 'e.g., 2 years, 6 months',
+                  prefixIcon: const Icon(LucideIcons.clock),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                validator: (value) {
+                  if (_selectedQrType == 'Plant' &&
+                      (value == null || value.trim().isEmpty)) {
+                    return 'Please enter the plant age';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
 
             // Plant Name
             Text(
@@ -391,9 +542,9 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Scientific Name
+            // Local Name (replaces Scientific Name)
             Text(
-              'Scientific Name',
+              'Local Name *',
               style: GoogleFonts.poppins(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -401,14 +552,20 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
             ),
             const SizedBox(height: 8),
             TextFormField(
-              controller: _scientificNameController,
+              controller: _localNameController,
               decoration: InputDecoration(
-                hintText: 'e.g., Epipremnum aureum',
-                prefixIcon: const Icon(LucideIcons.flaskConical),
+                hintText: 'e.g., Money Plant, Neem, Tulsi',
+                prefixIcon: const Icon(LucideIcons.languages),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Please enter local name';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: 16),
 
@@ -437,6 +594,35 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
               }).toList(),
               onChanged: (value) {
                 setState(() => _selectedCategory = value!);
+              },
+            ),
+            const SizedBox(height: 16),
+
+            // Best Season for Plantation
+            Text(
+              'Best Season for Plantation *',
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              value: _selectedSeason,
+              decoration: InputDecoration(
+                prefixIcon: const Icon(LucideIcons.sun),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              items: _seasons.map((season) {
+                return DropdownMenuItem(
+                  value: season,
+                  child: Text(season),
+                );
+              }).toList(),
+              onChanged: (value) {
+                setState(() => _selectedSeason = value!);
               },
             ),
             const SizedBox(height: 16),
@@ -497,6 +683,50 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
     );
   }
 
+  Widget _buildTypeChip({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required ColorScheme cs,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? cs.primary.withOpacity(0.15)
+              : cs.surfaceVariant.withOpacity(0.4),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? cs.primary : cs.outline.withOpacity(0.3),
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              size: 28,
+              color: isSelected ? cs.primary : cs.onSurface.withOpacity(0.5),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? cs.primary : cs.onSurface.withOpacity(0.6),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildQRView(ColorScheme cs) {
     final auth = Provider.of<AuthController>(context);
 
@@ -521,7 +751,7 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'QR Code Generated!',
+                        'My Garden QR Code Generated!',
                         style: GoogleFonts.poppins(
                           fontWeight: FontWeight.w600,
                           color: Colors.green.shade900,
@@ -561,6 +791,82 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
               ),
               child: Column(
                 children: [
+                  // MY GARDEN badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade100,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.green.shade400),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(LucideIcons.home,
+                            size: 14, color: Colors.green.shade800),
+                        const SizedBox(width: 6),
+                        Text(
+                          'MY GARDEN',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.green.shade800,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Seed / Plant type badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _selectedQrType == 'Seed'
+                          ? Colors.amber.shade50
+                          : Colors.teal.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _selectedQrType == 'Seed'
+                            ? Colors.amber.shade400
+                            : Colors.teal.shade400,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _selectedQrType == 'Seed'
+                              ? LucideIcons.sprout
+                              : LucideIcons.flower2,
+                          size: 14,
+                          color: _selectedQrType == 'Seed'
+                              ? Colors.amber.shade800
+                              : Colors.teal.shade800,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _selectedQrType.toUpperCase(),
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: _selectedQrType == 'Seed'
+                                ? Colors.amber.shade800
+                                : Colors.teal.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
                   QrImageView(
                     data: _generatedQRData,
                     version: QrVersions.auto,
@@ -577,9 +883,9 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  if (_scientificNameController.text.isNotEmpty)
+                  if (_localNameController.text.isNotEmpty)
                     Text(
-                      _scientificNameController.text,
+                      _localNameController.text,
                       style: GoogleFonts.poppins(
                         fontSize: 14,
                         fontStyle: FontStyle.italic,
@@ -638,8 +944,22 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                _buildDetailRow('Local Name', _localNameController.text,
+                    LucideIcons.languages),
                 _buildDetailRow(
                     'Category', _selectedCategory, LucideIcons.tags),
+                _buildDetailRow(
+                    'Best Season', _selectedSeason, LucideIcons.sun),
+                _buildDetailRow(
+                    'Type',
+                    _selectedQrType,
+                    _selectedQrType == 'Seed'
+                        ? LucideIcons.sprout
+                        : LucideIcons.flower2),
+                if (_selectedQrType == 'Plant' &&
+                    _plantAgeController.text.isNotEmpty)
+                  _buildDetailRow(
+                      'Plant Age', _plantAgeController.text, LucideIcons.clock),
                 if (_notesController.text.isNotEmpty)
                   _buildDetailRow(
                       'Notes', _notesController.text, LucideIcons.fileText),
@@ -675,17 +995,81 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
             ],
           ),
           const SizedBox(height: 12),
+
+          // Upload to Database Button
+          SizedBox(
+            width: double.infinity,
+            child: _savedToDb
+                ? Container(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.green.shade300),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(LucideIcons.checkCircle,
+                            size: 20, color: Colors.green.shade700),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Saved to My Garden Database',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.green.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ElevatedButton.icon(
+                    onPressed: _isSavingToDb ? null : _uploadToDatabase,
+                    icon: _isSavingToDb
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(LucideIcons.upload),
+                    label: Text(
+                      _isSavingToDb
+                          ? 'Uploading...'
+                          : 'Upload to My Garden Database',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      backgroundColor: Colors.green.shade600,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+          ),
+          const SizedBox(height: 12),
+
           SizedBox(
             width: double.infinity,
             child: TextButton.icon(
               onPressed: () {
                 setState(() {
                   _qrGenerated = false;
+                  _savedToDb = false;
+                  _isSavingToDb = false;
                   _formKey.currentState!.reset();
                   _plantNameController.clear();
-                  _scientificNameController.clear();
+                  _localNameController.clear();
                   _notesController.clear();
+                  _plantAgeController.clear();
                   _selectedCategory = 'Tree';
+                  _selectedSeason = 'Spring';
+                  _selectedQrType = 'Seed';
                 });
               },
               icon: const Icon(LucideIcons.refreshCw),

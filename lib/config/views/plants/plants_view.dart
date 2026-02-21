@@ -957,18 +957,28 @@ class _MyGardenPlantCard extends StatelessWidget {
                           Navigator.pop(context);
                           final XFile? image = await picker.pickImage(
                             source: ImageSource.camera,
+                            maxWidth: 1200,
+                            maxHeight: 1200,
+                            imageQuality: 85,
                           );
                           if (image != null) {
-                            await scanController.updatePlantImage(
-                                plant.id, image.path);
+                            final result = await scanController
+                                .updatePlantImage(plant.id, image.path);
                             if (context.mounted) {
+                              final now = DateTime.now();
+                              final timeStr =
+                                  '${now.day}/${now.month}/${now.year} ${now.hour}:${now.minute.toString().padLeft(2, '0')}';
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'Plant image updated successfully!',
+                                    result['success'] == true
+                                        ? 'Plant image updated & saved to database at $timeStr'
+                                        : 'Image updated locally (upload failed: ${result['error']})',
                                     style: GoogleFonts.poppins(),
                                   ),
-                                  backgroundColor: Colors.green,
+                                  backgroundColor: result['success'] == true
+                                      ? Colors.green
+                                      : Colors.orange,
                                 ),
                               );
                             }
@@ -985,16 +995,23 @@ class _MyGardenPlantCard extends StatelessWidget {
                             source: ImageSource.gallery,
                           );
                           if (image != null) {
-                            await scanController.updatePlantImage(
-                                plant.id, image.path);
+                            final result = await scanController
+                                .updatePlantImage(plant.id, image.path);
                             if (context.mounted) {
+                              final now = DateTime.now();
+                              final timeStr =
+                                  '${now.day}/${now.month}/${now.year} ${now.hour}:${now.minute.toString().padLeft(2, '0')}';
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
-                                    'Plant image updated successfully!',
+                                    result['success'] == true
+                                        ? 'Plant image updated & saved to database at $timeStr'
+                                        : 'Image updated locally (upload failed: ${result['error']})',
                                     style: GoogleFonts.poppins(),
                                   ),
-                                  backgroundColor: Colors.green,
+                                  backgroundColor: result['success'] == true
+                                      ? Colors.green
+                                      : Colors.orange,
                                 ),
                               );
                             }
