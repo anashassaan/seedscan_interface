@@ -107,8 +107,18 @@ class AuthController extends ChangeNotifier {
           // Load user profile document from DB
           await _loadUserProfile(user.$id);
 
-          // Check admin role
-          _isAdmin = await _appwriteService.isAdmin();
+          // Check admin role — prefer the already-loaded profile
+          if (_userModel != null && _userModel!.isAdmin) {
+            _isAdmin = true;
+            debugPrint(
+                '[AUTH] Admin detected from user profile (role=${_userModel!.role})');
+          } else {
+            // Fallback: labels + DB fetch via service
+            _isAdmin = await _appwriteService.isAdmin();
+            debugPrint('[AUTH] isAdmin from service: $_isAdmin');
+          }
+          debugPrint(
+              '[AUTH] signIn complete — isAdmin=$_isAdmin, userId=$_userId');
 
           notifyListeners();
           return true;
@@ -146,6 +156,10 @@ class AuthController extends ChangeNotifier {
     required String username,
     required String email,
     required String password,
+    String role = 'user',
+    String? communityName,
+    String? organization,
+    String? adminReason,
   }) async {
     _authError = null;
     try {
@@ -168,6 +182,10 @@ class AuthController extends ChangeNotifier {
             name: fullName,
             username: username,
             email: email,
+            role: role,
+            communityName: communityName,
+            organization: organization,
+            adminReason: adminReason,
           );
         } catch (dbErr) {
           // If the document already exists (e.g. retry), that's OK.
@@ -182,7 +200,9 @@ class AuthController extends ChangeNotifier {
         _loggedIn = true;
         _walletBalance = 0;
         _currentStreak = 0;
-        _isAdmin = false;
+
+        // Set admin directly from chosen role (reliable, no DB read-back needed)
+        _isAdmin = role == 'admin';
 
         notifyListeners();
         return true;
@@ -249,7 +269,17 @@ class AuthController extends ChangeNotifier {
         // Load user profile document
         await _loadUserProfile(user.$id);
 
-        _isAdmin = await _appwriteService.isAdmin();
+        // Check admin role — prefer the already-loaded profile
+        if (_userModel != null && _userModel!.isAdmin) {
+          _isAdmin = true;
+          debugPrint(
+              '[AUTH] init: Admin detected from profile (role=${_userModel!.role})');
+        } else {
+          _isAdmin = await _appwriteService.isAdmin();
+          debugPrint('[AUTH] init: isAdmin from service: $_isAdmin');
+        }
+        debugPrint(
+            '[AUTH] initialize complete — isAdmin=$_isAdmin, userId=$_userId');
         notifyListeners();
       }
     } catch (e) {
@@ -261,7 +291,11 @@ class AuthController extends ChangeNotifier {
   Future<void> _loadUserProfile(String userId) async {
     try {
       final doc = await _appwriteService.getUserDocument(userId);
+      debugPrint(
+          '[AUTH] getUserDocument($userId) → ${doc != null ? 'found' : 'null'}');
       if (doc != null) {
+        debugPrint(
+            '[AUTH] doc.data role=${doc.data['role']}, name=${doc.data['name']}');
         _userModel = UserModel.fromJson(doc.data);
         _walletBalance = _userModel!.walletBalance;
         _currentStreak = _userModel!.currentStreak;
@@ -274,7 +308,7 @@ class AuthController extends ChangeNotifier {
         }
       }
     } catch (e) {
-      debugPrint('Failed to load user profile: $e');
+      debugPrint('[AUTH] Failed to load user profile: $e');
     }
   }
 

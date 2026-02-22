@@ -33,9 +33,9 @@ class _AdminProfileViewState extends State<AdminProfileView>
     final auth = Provider.of<AuthController>(context, listen: false);
     _nameCtrl = TextEditingController(text: auth.userName);
     _bioCtrl = TextEditingController(
-      text: 'System Administrator | SeedScan Platform',
+      text: '',
     );
-    _phoneCtrl = TextEditingController(text: '+1 (555) 012-3456');
+    _phoneCtrl = TextEditingController(text: '');
     _animCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
@@ -648,7 +648,7 @@ class _AdminProfileViewState extends State<AdminProfileView>
                   _settingsTile(cs,
                       icon: LucideIcons.lock,
                       title: 'Change Password',
-                      subtitle: 'Last changed 30 days ago',
+                      subtitle: 'Update your password',
                       trailing: Icon(LucideIcons.chevronRight,
                           size: 18, color: cs.onSurface.withOpacity(0.25)),
                       onTap: _showChangePasswordDialog),
@@ -682,7 +682,7 @@ class _AdminProfileViewState extends State<AdminProfileView>
                   _settingsTile(cs,
                       icon: LucideIcons.fingerprint,
                       title: 'Login Sessions',
-                      subtitle: '1 active session',
+                      subtitle: 'Manage active sessions',
                       trailing: Icon(LucideIcons.chevronRight,
                           size: 18, color: cs.onSurface.withOpacity(0.25)),
                       onTap: () => _showSessionsDialog()),
@@ -726,7 +726,7 @@ class _AdminProfileViewState extends State<AdminProfileView>
                   _infoRow(cs,
                       icon: LucideIcons.calendar,
                       label: 'Member Since',
-                      value: 'January 2024'),
+                      value: '—'),
                   _infoDivider(cs),
                   _infoRow(cs,
                       icon: LucideIcons.clock,
@@ -741,12 +741,10 @@ class _AdminProfileViewState extends State<AdminProfileView>
                   _infoRow(cs,
                       icon: LucideIcons.hash,
                       label: 'Admin ID',
-                      value: auth.userId ?? 'ADM-001'),
+                      value: auth.userId ?? '—'),
                   _infoDivider(cs),
                   _infoRow(cs,
-                      icon: LucideIcons.globe,
-                      label: 'Region',
-                      value: 'Global'),
+                      icon: LucideIcons.globe, label: 'Region', value: '—'),
                 ]),
 
                 const SizedBox(height: 28),
@@ -1128,12 +1126,6 @@ class _AdminProfileViewState extends State<AdminProfileView>
                 location: 'Current session',
                 time: 'Now',
                 isActive: true),
-            const SizedBox(height: 8),
-            _sessionItem(cs,
-                device: 'Chrome - Windows',
-                location: 'Web Dashboard',
-                time: '2 days ago',
-                isActive: false),
           ],
         ),
         actions: [

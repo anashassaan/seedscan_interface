@@ -477,7 +477,7 @@ class _ManageCommunitiesViewState extends State<ManageCommunitiesView> {
                             Expanded(
                               flex: 2,
                               child: FilledButton.icon(
-                                onPressed: () {
+                                onPressed: () async {
                                   // Validate image separately
                                   bool imageValid = selectedImage != null;
                                   if (!imageValid) {
@@ -488,7 +488,7 @@ class _ManageCommunitiesViewState extends State<ManageCommunitiesView> {
                                   }
                                   if (formKey.currentState!.validate() &&
                                       imageValid) {
-                                    admin.addCommunity(
+                                    final success = await admin.addCommunity(
                                       name: nameCtrl.text.trim(),
                                       location: locationCtrl.text.trim(),
                                       description: descCtrl.text.trim(),
@@ -496,18 +496,34 @@ class _ManageCommunitiesViewState extends State<ManageCommunitiesView> {
                                       imagePath: selectedImage!.path,
                                       category: selectedCategory,
                                     );
-                                    Navigator.pop(ctx);
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                            '${nameCtrl.text.trim()} created successfully'),
-                                        behavior: SnackBarBehavior.floating,
-                                        shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(10)),
-                                        backgroundColor: cs.primary,
-                                      ),
-                                    );
+                                    if (ctx.mounted) Navigator.pop(ctx);
+                                    if (success) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                              '${nameCtrl.text.trim()} created successfully'),
+                                          behavior: SnackBarBehavior.floating,
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10)),
+                                          backgroundColor: cs.primary,
+                                        ),
+                                      );
+                                    } else {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(admin.errorMessage ??
+                                              'Failed to create community'),
+                                          behavior: SnackBarBehavior.floating,
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(10)),
+                                          backgroundColor: Colors.red.shade700,
+                                        ),
+                                      );
+                                    }
                                   }
                                 },
                                 icon: const Icon(LucideIcons.plus, size: 18),
@@ -604,9 +620,9 @@ class _ManageCommunitiesViewState extends State<ManageCommunitiesView> {
             child: Text('Cancel', style: TextStyle(color: cs.onSurface)),
           ),
           FilledButton(
-            onPressed: () {
-              admin.deleteCommunity(index);
-              Navigator.pop(ctx);
+            onPressed: () async {
+              await admin.deleteCommunity(index);
+              if (ctx.mounted) Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text('${community.name} deleted'),
@@ -828,29 +844,50 @@ class _ManageCommunitiesViewState extends State<ManageCommunitiesView> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       // ── Community Image Banner ──
-                                      if (community.imagePath != null)
+                                      if (community.displayImage != null)
                                         ClipRRect(
                                           borderRadius:
                                               const BorderRadius.vertical(
                                                   top: Radius.circular(17)),
-                                          child: Image.file(
-                                            File(community.imagePath!),
-                                            height: 120,
-                                            width: double.infinity,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) =>
-                                                Container(
-                                              height: 80,
-                                              color: cs.primaryContainer
-                                                  .withOpacity(0.3),
-                                              child: Center(
-                                                child: Icon(LucideIcons.image,
-                                                    color: cs.primary
-                                                        .withOpacity(0.4),
-                                                    size: 28),
-                                              ),
-                                            ),
-                                          ),
+                                          child: community.hasNetworkImage
+                                              ? Image.network(
+                                                  community.imageUrl!,
+                                                  height: 120,
+                                                  width: double.infinity,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (_, __, ___) =>
+                                                      Container(
+                                                    height: 80,
+                                                    color: cs.primaryContainer
+                                                        .withOpacity(0.3),
+                                                    child: Center(
+                                                      child: Icon(
+                                                          LucideIcons.image,
+                                                          color: cs.primary
+                                                              .withOpacity(0.4),
+                                                          size: 28),
+                                                    ),
+                                                  ),
+                                                )
+                                              : Image.file(
+                                                  File(community.imagePath!),
+                                                  height: 120,
+                                                  width: double.infinity,
+                                                  fit: BoxFit.cover,
+                                                  errorBuilder: (_, __, ___) =>
+                                                      Container(
+                                                    height: 80,
+                                                    color: cs.primaryContainer
+                                                        .withOpacity(0.3),
+                                                    child: Center(
+                                                      child: Icon(
+                                                          LucideIcons.image,
+                                                          color: cs.primary
+                                                              .withOpacity(0.4),
+                                                          size: 28),
+                                                    ),
+                                                  ),
+                                                ),
                                         ),
 
                                       Padding(
@@ -953,15 +990,21 @@ class _ManageCommunitiesViewState extends State<ManageCommunitiesView> {
                                                                       0.5)),
                                                           const SizedBox(
                                                               width: 4),
-                                                          Text(
-                                                              community
-                                                                  .location,
-                                                              style: TextStyle(
-                                                                  fontSize: 13,
-                                                                  color: cs
-                                                                      .onSurface
-                                                                      .withOpacity(
-                                                                          0.5))),
+                                                          Flexible(
+                                                            child: Text(
+                                                                community
+                                                                    .location,
+                                                                overflow:
+                                                                    TextOverflow
+                                                                        .ellipsis,
+                                                                style: TextStyle(
+                                                                    fontSize:
+                                                                        13,
+                                                                    color: cs
+                                                                        .onSurface
+                                                                        .withOpacity(
+                                                                            0.5))),
+                                                          ),
                                                         ],
                                                       ),
                                                     ],

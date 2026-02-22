@@ -147,14 +147,14 @@ class CommunityDetailsView extends StatelessWidget {
                       Expanded(
                         flex: 2,
                         child: FilledButton.icon(
-                          onPressed: () {
+                          onPressed: () async {
                             if (formKey.currentState!.validate()) {
-                              admin.addUserToCommunity(
+                              await admin.addUserToCommunity(
                                 communityIndex,
                                 nameCtrl.text.trim(),
                                 emailCtrl.text.trim(),
                               );
-                              Navigator.pop(ctx);
+                              if (ctx.mounted) Navigator.pop(ctx);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(
@@ -212,9 +212,9 @@ class CommunityDetailsView extends StatelessWidget {
             child: Text('Cancel', style: TextStyle(color: cs.onSurface)),
           ),
           FilledButton(
-            onPressed: () {
-              admin.removeUserFromCommunity(communityIndex, userIndex);
-              Navigator.pop(ctx);
+            onPressed: () async {
+              await admin.removeUserFromCommunity(communityIndex, userIndex);
+              if (ctx.mounted) Navigator.pop(ctx);
             },
             style: FilledButton.styleFrom(backgroundColor: cs.error),
             child: const Text('Remove',
@@ -273,7 +273,7 @@ class CommunityDetailsView extends StatelessWidget {
       body: Column(
         children: [
           // ── Community Image Banner ──
-          if (community.imagePath != null)
+          if (community.displayImage != null)
             Container(
               margin: const EdgeInsets.fromLTRB(20, 8, 20, 0),
               height: 140,
@@ -283,15 +283,25 @@ class CommunityDetailsView extends StatelessWidget {
                 color: cs.surfaceVariant.withOpacity(0.3),
               ),
               clipBehavior: Clip.antiAlias,
-              child: Image.file(
-                File(community.imagePath!),
-                fit: BoxFit.cover,
-                width: double.infinity,
-                errorBuilder: (_, __, ___) => Center(
-                  child: Icon(LucideIcons.image,
-                      size: 36, color: cs.onSurface.withOpacity(0.15)),
-                ),
-              ),
+              child: community.hasNetworkImage
+                  ? Image.network(
+                      community.imageUrl!,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (_, __, ___) => Center(
+                        child: Icon(LucideIcons.image,
+                            size: 36, color: cs.onSurface.withOpacity(0.15)),
+                      ),
+                    )
+                  : Image.file(
+                      File(community.imagePath!),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (_, __, ___) => Center(
+                        child: Icon(LucideIcons.image,
+                            size: 36, color: cs.onSurface.withOpacity(0.15)),
+                      ),
+                    ),
             ),
 
           // ── Community header card ──
@@ -314,11 +324,14 @@ class CommunityDetailsView extends StatelessWidget {
                       Icon(LucideIcons.mapPin,
                           size: 16, color: cs.onSurface.withOpacity(0.5)),
                       const SizedBox(width: 6),
-                      Text(community.location,
-                          style: TextStyle(
-                              fontSize: 14,
-                              color: cs.onSurface.withOpacity(0.6))),
-                      const Spacer(),
+                      Flexible(
+                        child: Text(community.location,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 14,
+                                color: cs.onSurface.withOpacity(0.6))),
+                      ),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),

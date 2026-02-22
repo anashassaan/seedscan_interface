@@ -36,6 +36,11 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
       const CoinAnalyticsView(),
       const AdminProfileView(),
     ];
+    // Initialize admin data from Appwrite backend
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final admin = Provider.of<AdminController>(context, listen: false);
+      admin.initialize();
+    });
   }
 
   @override

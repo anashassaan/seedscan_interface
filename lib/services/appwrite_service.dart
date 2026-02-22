@@ -1,5 +1,6 @@
 // lib/services/appwrite_service.dart
 import 'package:appwrite/appwrite.dart';
+import 'package:flutter/foundation.dart';
 import '../config/appwrite_constants.dart';
 
 /// Shared Appwrite service for both main app and admin panel.
@@ -43,6 +44,10 @@ class AppwriteService {
       AppwriteConstants.notificationsCollection;
   static const String userFcmTokensCollectionId =
       AppwriteConstants.userFcmTokensCollection;
+  static const String adminQrCodesCollectionId =
+      AppwriteConstants.adminQrCodesCollection;
+  static const String systemLogsCollectionId =
+      AppwriteConstants.systemLogsCollection;
 
   // Storage bucket IDs
   static const String plantImagesBucket = AppwriteConstants.plantImagesBucket;
@@ -124,21 +129,41 @@ class AppwriteService {
     required String name,
     required String username,
     required String email,
+    String role = 'user',
+    String? communityName,
+    String? organization,
+    String? adminReason,
   }) async {
     try {
+      final data = <String, dynamic>{
+        'name': name,
+        'username': username,
+        'email': email,
+        'role': role,
+        'wallet_balance': 0,
+        'current_streak': 0,
+        'joined_drives': [],
+        'created_at': DateTime.now().toIso8601String(),
+      };
+
+      // Add admin-specific fields if registering as admin
+      if (role == 'admin') {
+        if (communityName != null && communityName.isNotEmpty) {
+          data['community_name'] = communityName;
+        }
+        if (organization != null && organization.isNotEmpty) {
+          data['organization'] = organization;
+        }
+        if (adminReason != null && adminReason.isNotEmpty) {
+          data['admin_reason'] = adminReason;
+        }
+      }
+
       return await _databases.createDocument(
         databaseId: databaseId,
         collectionId: usersCollectionId,
         documentId: userId,
-        data: {
-          'name': name,
-          'username': username,
-          'email': email,
-          'wallet_balance': 0,
-          'current_streak': 0,
-          'joined_drives': [],
-          'created_at': DateTime.now().toIso8601String(),
-        },
+        data: data,
       );
     } catch (e) {
       rethrow;
@@ -236,6 +261,7 @@ class AppwriteService {
     required String collectionId,
     required Map<String, dynamic> data,
     String? documentId,
+    List<String>? permissions,
   }) async {
     try {
       return await _databases.createDocument(
@@ -243,6 +269,7 @@ class AppwriteService {
         collectionId: collectionId,
         documentId: documentId ?? ID.unique(),
         data: data,
+        permissions: permissions,
       );
     } catch (e) {
       rethrow;
@@ -290,12 +317,14 @@ class AppwriteService {
     required String bucketId,
     required String filePath,
     required String fileId,
+    List<String>? permissions,
   }) async {
     try {
       return await _storage.createFile(
         bucketId: bucketId,
         fileId: fileId,
         file: InputFile.fromPath(path: filePath),
+        permissions: permissions,
       );
     } catch (e) {
       rethrow;
@@ -354,22 +383,32 @@ class AppwriteService {
   Future<bool> isAdmin() async {
     try {
       final user = await getCurrentUser();
-      if (user == null) return false;
+      if (user == null) {
+        debugPrint('[APPWRITE] isAdmin: no current user');
+        return false;
+      }
 
-      // TODO: Implement your admin role check logic
-      // Option 1: Check user labels
+      // Check 1: Appwrite Auth labels
       final labels = user.labels as List<dynamic>? ?? [];
+      debugPrint('[APPWRITE] isAdmin: labels=$labels');
       if (labels.contains('admin')) return true;
 
-      // Option 2: Check in custom user document
-      // final userDoc = await getDocument(
-      //   collectionId: usersCollectionId,
-      //   documentId: user.$id,
-      // );
-      // return userDoc.data['isAdmin'] == true;
+      // Check 2: 'role' field in user document (users collection)
+      try {
+        final userDoc = await _databases.getDocument(
+          databaseId: databaseId,
+          collectionId: usersCollectionId,
+          documentId: user.$id,
+        );
+        debugPrint('[APPWRITE] isAdmin: doc role=${userDoc.data['role']}');
+        if (userDoc.data['role'] == 'admin') return true;
+      } catch (e) {
+        debugPrint('[APPWRITE] isAdmin: failed to read user doc: $e');
+      }
 
       return false;
     } catch (e) {
+      debugPrint('[APPWRITE] isAdmin: outer error: $e');
       return false;
     }
   }

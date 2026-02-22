@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:lucide_icons/lucide_icons.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../controllers/scan_controller.dart';
 import '../../controllers/chat_controller.dart';
 import '../../controllers/community_controller.dart';
 import '../../controllers/auth_controller.dart';
 import '../../../models/community_model.dart';
+import '../../../services/database_service.dart';
 import 'dart:async';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
@@ -444,222 +448,43 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
     );
   }
 
-  // Handle QR code and check if it belongs to a community
+  // Handle QR code — detect SEEDSCAN| community plant QR codes
   void _handleQrCodeScanned(String qrCode, Map<String, dynamic> scanResult) {
-    final communityController =
-        Provider.of<CommunityController>(context, listen: false);
-    final community = communityController.getCommunityByQrCode(qrCode);
+    // ── Community plant QR: SEEDSCAN|communityId|id|plantName|plantType|bestSeason|SEED/PLANT|plantAge|timestamp
+    if (qrCode.startsWith('SEEDSCAN|')) {
+      final parts = qrCode.split('|');
+      if (parts.length >= 9) {
+        final communityId = parts[1];
+        final qrId = parts[2];
+        final plantName = parts[3];
+        final plantType = parts[4];
+        final bestSeason = parts[5];
+        final isSeed = parts[6] == 'SEED';
+        final plantAge = parts[7] == 'N/A' ? null : parts[7];
 
-    if (community != null) {
-      // QR code belongs to a community
-      _showAddToCommunityDialog(community, qrCode, scanResult);
-    } else {
-      // Regular QR code - show standard notification
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('QR Code: $qrCode'),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => _UnifiedCommunityQRDialog(
+            communityId: communityId,
+            qrId: qrId,
+            plantName: plantName,
+            plantType: plantType,
+            bestSeason: bestSeason,
+            isSeed: isSeed,
+            plantAge: plantAge,
+          ),
+        );
+        return;
+      }
     }
-  }
 
-  // Show dialog to add plant to community
-  void _showAddToCommunityDialog(
-    Community community,
-    String qrCode,
-    Map<String, dynamic> scanResult,
-  ) {
-    final cs = Theme.of(context).colorScheme;
-    final TextEditingController nameController = TextEditingController();
-    final TextEditingController scientificNameController =
-        TextEditingController();
-    final TextEditingController descriptionController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Add Plant to Community'),
-            const SizedBox(height: 4),
-            Text(
-              community.name,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: cs.primary,
-              ),
-            ),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'QR Code: $qrCode',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: cs.onSurface.withOpacity(0.6),
-                  fontFamily: 'monospace',
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Plant Name',
-                  hintText: 'e.g., Apple Tree',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: scientificNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Scientific Name',
-                  hintText: 'e.g., Malus domestica',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  hintText: 'Brief description of the plant',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 12),
-              if (scanResult['latitude'] != null &&
-                  scanResult['longitude'] != null)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: cs.primaryContainer.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.location_on, size: 16, color: cs.primary),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Location Captured',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: cs.onPrimaryContainer,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Lat: ${scanResult['latitude']?.toStringAsFixed(6)}\n'
-                        'Long: ${scanResult['longitude']?.toStringAsFixed(6)}',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontFamily: 'monospace',
-                          color: cs.onPrimaryContainer.withOpacity(0.8),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (nameController.text.isNotEmpty) {
-                _addPlantToCommunity(
-                  community,
-                  qrCode,
-                  nameController.text,
-                  scientificNameController.text,
-                  descriptionController.text,
-                  scanResult,
-                );
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Add to Community'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Add plant to community
-  void _addPlantToCommunity(
-    Community community,
-    String qrCode,
-    String name,
-    String scientificName,
-    String description,
-    Map<String, dynamic> scanResult,
-  ) {
-    final communityController =
-        Provider.of<CommunityController>(context, listen: false);
-    final authController = Provider.of<AuthController>(context, listen: false);
-
-    // Create plant model
-    final plant = CommunityPlant(
-      id: qrCode,
-      communityId: community.id,
-      plantName: name,
-      scientificName:
-          scientificName.isNotEmpty ? scientificName : 'Unknown species',
-      plantedBy: authController.userEmail ?? authController.userHandle,
-      plantedByUsername: authController.userName,
-      plantedByAvatar: authController.profileImage,
-      location:
-          'Lat: ${scanResult['latitude']?.toStringAsFixed(4)}, Long: ${scanResult['longitude']?.toStringAsFixed(4)}',
-      imageUrl:
-          'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=800',
-      likeCount: 0,
-      commentCount: 0,
-      category: 'Community Plant',
-      description: description.isNotEmpty ? description : 'Added via QR scan',
-      plantedDate: DateTime.now(),
-      status: 'Healthy',
-      latitude: scanResult['latitude'],
-      longitude: scanResult['longitude'],
-      isLiked: false,
-      tags: [],
-    );
-
-    // Add to community
-    communityController.addPlantToCommunity(plant);
-
-    // Show success message
+    // ── Regular / unknown QR code
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Plant added to ${community.name}'),
-        backgroundColor: Colors.green,
+        content: Text('QR Code: $qrCode'),
+        duration: const Duration(seconds: 2),
         behavior: SnackBarBehavior.floating,
-        action: SnackBarAction(
-          label: 'View',
-          textColor: Colors.white,
-          onPressed: () {
-            // Navigate to community plants view
-            Navigator.pushNamed(context, '/community/${community.id}');
-          },
-        ),
       ),
     );
   }
@@ -1285,6 +1110,465 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// ═══════════════════════════════════════════════════════════════════════════
+/// Community Plant QR Dialog (Unified Scanner)
+/// Auto-joins the user to the community when they plant the QR plant.
+/// ═══════════════════════════════════════════════════════════════════════════
+class _UnifiedCommunityQRDialog extends StatefulWidget {
+  final String communityId;
+  final String qrId;
+  final String plantName;
+  final String plantType;
+  final String bestSeason;
+  final bool isSeed;
+  final String? plantAge;
+
+  const _UnifiedCommunityQRDialog({
+    required this.communityId,
+    required this.qrId,
+    required this.plantName,
+    required this.plantType,
+    required this.bestSeason,
+    required this.isSeed,
+    this.plantAge,
+  });
+
+  @override
+  State<_UnifiedCommunityQRDialog> createState() =>
+      _UnifiedCommunityQRDialogState();
+}
+
+class _UnifiedCommunityQRDialogState extends State<_UnifiedCommunityQRDialog> {
+  final DatabaseService _db = DatabaseService();
+
+  bool _isLoading = true;
+  String _communityName = '';
+  bool _alreadyMember = false;
+  bool _isPlanting = false;
+  bool _planted = false;
+  String? _joinMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCommunityInfo();
+  }
+
+  Future<void> _loadCommunityInfo() async {
+    final auth = Provider.of<AuthController>(context, listen: false);
+    final userId = auth.userId ?? '';
+
+    try {
+      final community = await _db.getCommunity(widget.communityId);
+      final name = community?.name ?? widget.communityId;
+
+      bool isMember = false;
+      if (userId.isNotEmpty) {
+        isMember = await _db.isUserInCommunity(widget.communityId, userId);
+      }
+
+      if (mounted) {
+        setState(() {
+          _communityName = name;
+          _alreadyMember = isMember;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load community info: $e');
+      if (mounted) {
+        setState(() {
+          _communityName = widget.communityId;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _plantAndJoin() async {
+    setState(() => _isPlanting = true);
+
+    try {
+      // 1. Take a photo of the plant
+      final picker = ImagePicker();
+      final XFile? photo = await picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+      );
+
+      if (photo == null) {
+        if (mounted) setState(() => _isPlanting = false);
+        return;
+      }
+
+      // 2. Get GPS location
+      double lat = 0.0;
+      double lng = 0.0;
+      try {
+        bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        if (!serviceEnabled) {
+          await Geolocator.openLocationSettings();
+          await Future.delayed(const Duration(seconds: 3));
+          serviceEnabled = await Geolocator.isLocationServiceEnabled();
+        }
+        if (serviceEnabled) {
+          LocationPermission perm = await Geolocator.checkPermission();
+          if (perm == LocationPermission.denied) {
+            perm = await Geolocator.requestPermission();
+          }
+          if (perm == LocationPermission.always ||
+              perm == LocationPermission.whileInUse) {
+            final pos = await Geolocator.getCurrentPosition(
+              desiredAccuracy: LocationAccuracy.high,
+            ).timeout(const Duration(seconds: 15));
+            lat = pos.latitude;
+            lng = pos.longitude;
+          }
+        }
+      } catch (e) {
+        debugPrint('GPS failed: $e');
+      }
+
+      // 3. Upload plant image
+      String? imageUrl;
+      try {
+        final fileId = await _db.uploadPlantImage(photo.path);
+        imageUrl = _db.getPlantImageUrl(fileId);
+      } catch (e) {
+        debugPrint('Image upload failed: $e');
+      }
+
+      // 4. Create plant record in Appwrite
+      final auth = Provider.of<AuthController>(context, listen: false);
+      final userId = auth.userId ?? '';
+      try {
+        await _db.createPlant(
+          species: widget.plantName,
+          guardianId: userId,
+          lat: lat,
+          lng: lng,
+          imageUrl: imageUrl ?? photo.path,
+          nickname: widget.plantType,
+          plantId: widget.qrId,
+        );
+      } catch (e) {
+        debugPrint('Plant creation failed: $e');
+      }
+
+      // 5. Create activity log
+      try {
+        String? proofId;
+        try {
+          proofId = await _db.uploadPlantImage(photo.path);
+        } catch (_) {}
+        await _db.createActivityLog(
+          userId: userId,
+          plantId: widget.qrId,
+          actionType: 'register',
+          coinsAwarded: 10,
+          verificationStatus: 'verified',
+          proofImageId: proofId ?? '',
+        );
+      } catch (e) {
+        debugPrint('Activity log failed: $e');
+      }
+
+      // 6. Auto-join community if not already a member
+      String joinMsg = '';
+      if (!_alreadyMember && userId.isNotEmpty) {
+        try {
+          await _db.addCommunityMember(
+            communityId: widget.communityId,
+            userId: userId,
+            role: 'member',
+          );
+          await _db.incrementCommunityMemberCount(widget.communityId);
+          joinMsg = 'You have been added to $_communityName!';
+          _alreadyMember = true;
+        } catch (e) {
+          debugPrint('Auto-join failed: $e');
+          joinMsg = 'Planted successfully, but could not join community.';
+        }
+      } else if (_alreadyMember) {
+        joinMsg = 'Plant registered in $_communityName.';
+      }
+
+      // 7. Add community to the Community tab
+      final communityCtrl =
+          Provider.of<CommunityController>(context, listen: false);
+      try {
+        final freshCommunity = await _db.getCommunity(widget.communityId);
+        if (freshCommunity != null) {
+          communityCtrl.addCommunityLocally(freshCommunity);
+        }
+      } catch (_) {}
+
+      communityCtrl.addPlantToCommunity(CommunityPlant(
+        id: widget.qrId,
+        communityId: widget.communityId,
+        plantName: widget.plantName,
+        scientificName: widget.plantType,
+        plantedBy: userId,
+        plantedByUsername: auth.userName,
+        location: lat != 0.0
+            ? 'GPS: ${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}'
+            : 'Location not available',
+        latitude: lat,
+        longitude: lng,
+        imageUrl: imageUrl ?? photo.path,
+        plantedDate: DateTime.now(),
+        status: 'Healthy',
+        category: widget.plantType,
+      ));
+
+      if (mounted) {
+        setState(() {
+          _isPlanting = false;
+          _planted = true;
+          _joinMessage = joinMsg;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isPlanting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+      title: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: cs.primaryContainer,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child:
+                Icon(LucideIcons.trees, size: 20, color: cs.onPrimaryContainer),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Community Plant QR',
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w700,
+                fontSize: 17,
+              ),
+            ),
+          ),
+        ],
+      ),
+      content: _isLoading
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          : SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Community name banner
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: cs.primaryContainer.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: cs.primary.withOpacity(0.2)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(LucideIcons.globe2, size: 18, color: cs.primary),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _communityName,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              color: cs.primary,
+                            ),
+                          ),
+                        ),
+                        if (_alreadyMember && !_planted)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'Member',
+                              style: GoogleFonts.poppins(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.green.shade800,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Plant info
+                  _infoRow(LucideIcons.sprout, 'Plant', widget.plantName),
+                  _infoRow(LucideIcons.tag, 'Type', widget.plantType),
+                  _infoRow(LucideIcons.sun, 'Best Season', widget.bestSeason),
+                  _infoRow(LucideIcons.leaf, 'Form',
+                      widget.isSeed ? 'Seed' : 'Plant'),
+                  if (widget.plantAge != null)
+                    _infoRow(LucideIcons.calendar, 'Age', widget.plantAge!),
+
+                  const SizedBox(height: 12),
+
+                  // Membership info
+                  if (!_alreadyMember && !_planted)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(LucideIcons.info,
+                              size: 16, color: Colors.blue.shade700),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Planting this will auto-join you to $_communityName',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: Colors.blue.shade800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // Success message
+                  if (_planted && _joinMessage != null)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(top: 4),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(LucideIcons.checkCircle,
+                              size: 18, color: Colors.green.shade700),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _joinMessage!,
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.green.shade800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+      actions: [
+        if (!_planted && !_isLoading)
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _isPlanting ? null : _plantAndJoin,
+              icon: _isPlanting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(LucideIcons.sprout),
+              label: Text(
+                _isPlanting
+                    ? 'Planting...'
+                    : _alreadyMember
+                        ? '🌱 Plant Now'
+                        : '🌱 Plant & Join Community',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green.shade600,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+              ),
+            ),
+          ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text(
+            _planted ? 'Done' : 'Close',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _infoRow(IconData icon, String label, String value) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: cs.onSurface.withOpacity(0.5)),
+          const SizedBox(width: 8),
+          Text(
+            '$label: ',
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: cs.onSurface.withOpacity(0.7),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: GoogleFonts.poppins(fontSize: 13, color: cs.onSurface),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
       ),
     );
   }

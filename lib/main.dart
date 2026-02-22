@@ -83,6 +83,14 @@ class _EntryDeciderState extends State<EntryDecider> {
   Future<void> _init() async {
     final auth = Provider.of<AuthController>(context, listen: false);
     await auth.initialize();
+
+    // Load user's communities from Appwrite once logged in
+    if (auth.isLoggedIn && !auth.isAdmin) {
+      final communityCtrl =
+          Provider.of<CommunityController>(context, listen: false);
+      communityCtrl.loadUserCommunities(auth.userId ?? '');
+    }
+
     if (mounted) {
       setState(() => _initializing = false);
     }

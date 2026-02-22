@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lucide_icons/lucide_icons.dart';
 
 class SystemLogsView extends StatelessWidget {
   const SystemLogsView({super.key});
@@ -11,21 +12,32 @@ class SystemLogsView extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('System Logs')),
       backgroundColor: isDark ? cs.surface : const Color(0xFF1E1E2E),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(12),
-        itemCount: 20,
-        itemBuilder: (context, index) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 4.0),
-            child: Text(
-              '[${DateTime.now().toString().substring(11, 19)}] INFO: Scan performed by User ID 402 - Confidence 0.92',
-              style: const TextStyle(
-                  color: Colors.greenAccent,
-                  fontFamily: 'monospace',
-                  fontSize: 12),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(LucideIcons.fileText,
+                size: 48, color: Colors.greenAccent.withOpacity(0.4)),
+            const SizedBox(height: 16),
+            Text(
+              'No logs available',
+              style: TextStyle(
+                color: Colors.greenAccent.withOpacity(0.6),
+                fontFamily: 'monospace',
+                fontSize: 14,
+              ),
             ),
-          );
-        },
+            const SizedBox(height: 8),
+            Text(
+              'System logs will appear here as activity occurs.',
+              style: TextStyle(
+                color: Colors.greenAccent.withOpacity(0.3),
+                fontFamily: 'monospace',
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

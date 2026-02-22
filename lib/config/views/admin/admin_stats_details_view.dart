@@ -555,71 +555,35 @@ class _TreeScansStatsPageState extends State<TreeScansStatsPage>
 
     // Base calculations from actual admin data
     final totalAllTime = admin.totalScans;
-    final baseUnit =
-        (totalAllTime / 12).round(); // Divide into 12 units for distribution
 
     switch (period) {
       case 'Today':
         labels = ['6AM', '9AM', '12PM', '3PM', '6PM', '9PM'];
-        // Today = ~5% of total, distributed across 6 time slots
-        final todayTotal = (totalAllTime * 0.05).round();
-        values = [
-          (todayTotal * 0.08).round(),
-          (todayTotal * 0.18).round(),
-          (todayTotal * 0.28).round(),
-          (todayTotal * 0.22).round(),
-          (todayTotal * 0.14).round(),
-          (todayTotal * 0.10).round(),
-        ];
+        values = [0, 0, 0, 0, 0, 0];
         periodLabel = 'Today';
-        trendPercent = '+12%';
+        trendPercent = '';
         highlightIndex = DateTime.now().hour ~/ 3;
         break;
       case 'This Week':
         labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        // Week = ~25% of total, distributed across 7 days
-        final weekTotal = (totalAllTime * 0.25).round();
-        values = [
-          (weekTotal * 0.11).round(),
-          (weekTotal * 0.15).round(),
-          (weekTotal * 0.08).round(),
-          (weekTotal * 0.14).round(),
-          (weekTotal * 0.17).round(),
-          (weekTotal * 0.20).round(),
-          (weekTotal * 0.15).round(),
-        ];
+        values = [0, 0, 0, 0, 0, 0, 0];
         periodLabel = '7 Days';
-        trendPercent = '+18%';
+        trendPercent = '';
         highlightIndex = DateTime.now().weekday - 1;
         break;
       case 'This Month':
         labels = ['W1', 'W2', 'W3', 'W4'];
-        // Month = ~60% of total, distributed across 4 weeks
-        final monthTotal = (totalAllTime * 0.6).round();
-        values = [
-          (monthTotal * 0.20).round(),
-          (monthTotal * 0.28).round(),
-          (monthTotal * 0.22).round(),
-          (monthTotal * 0.30).round(),
-        ];
+        values = [0, 0, 0, 0];
         periodLabel = '4 Weeks';
-        trendPercent = '+24%';
+        trendPercent = '';
         highlightIndex = (DateTime.now().day - 1) ~/ 7;
         break;
       case 'All Time':
       default:
         labels = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb'];
-        // All Time = 100%, distributed across 6 months with growth trend
-        values = [
-          (totalAllTime * 0.10).round(),
-          (totalAllTime * 0.14).round(),
-          (totalAllTime * 0.12).round(),
-          (totalAllTime * 0.18).round(),
-          (totalAllTime * 0.21).round(),
-          (totalAllTime * 0.25).round(),
-        ];
+        values = [0, 0, 0, 0, 0, 0];
         periodLabel = '6 Months';
-        trendPercent = '+35%';
+        trendPercent = '';
         highlightIndex = labels.length - 1;
         break;
     }
@@ -772,8 +736,8 @@ class _TreeScansStatsPageState extends State<TreeScansStatsPage>
                 child: _buildAccuracyItem(
                   cs,
                   label: 'High',
-                  value: '78%',
-                  progress: 0.78,
+                  value: '—',
+                  progress: 0.0,
                   color: const Color(0xFF0BA360),
                 ),
               ),
@@ -782,8 +746,8 @@ class _TreeScansStatsPageState extends State<TreeScansStatsPage>
                 child: _buildAccuracyItem(
                   cs,
                   label: 'Medium',
-                  value: '18%',
-                  progress: 0.18,
+                  value: '—',
+                  progress: 0.0,
                   color: Colors.orange,
                 ),
               ),
@@ -792,8 +756,8 @@ class _TreeScansStatsPageState extends State<TreeScansStatsPage>
                 child: _buildAccuracyItem(
                   cs,
                   label: 'Low',
-                  value: '4%',
-                  progress: 0.04,
+                  value: '—',
+                  progress: 0.0,
                   color: Colors.redAccent,
                 ),
               ),
@@ -829,7 +793,7 @@ class _TreeScansStatsPageState extends State<TreeScansStatsPage>
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                               color: cs.onSurface)),
-                      Text('MobileNetV3 · Updated 2 days ago',
+                      Text('MobileNetV3 Apple Disease',
                           style: TextStyle(
                               fontSize: 11,
                               color: cs.onSurface.withOpacity(0.5))),
@@ -843,7 +807,7 @@ class _TreeScansStatsPageState extends State<TreeScansStatsPage>
                     color: const Color(0xFF0BA360),
                     borderRadius: BorderRadius.circular(20),
                   ),
-                  child: const Text('96.2%',
+                  child: const Text('—',
                       style: TextStyle(
                           color: Colors.white,
                           fontSize: 12,
@@ -1097,11 +1061,10 @@ class _DiseaseStatsPageState extends State<DiseaseStatsPage> {
     'Powdery Mildew',
   ];
 
-  // Generate random disease counts for a community
+  // Generate disease counts - returns zeros (no dummy data)
   Map<String, int> _generateDiseaseData(int communityIndex) {
-    final random = Random(communityIndex * 42);
     return {
-      for (var disease in diseaseTypes) disease: random.nextInt(15) + 1,
+      for (var disease in diseaseTypes) disease: 0,
     };
   }
 
@@ -1403,8 +1366,18 @@ class _CustomNotificationSenderPageState
         }
         break;
       case 'disease':
-        // Simulate disease-affected plants count
-        count = Random().nextInt(20) + 5;
+        // Count from real community members with disease-related stats
+        for (var community in admin.communities) {
+          for (var member in community.members) {
+            for (var stat in member.stats) {
+              if (stat.action == 'Health Scan' ||
+                  stat.action == 'Disease Detection') {
+                count++;
+                break;
+              }
+            }
+          }
+        }
         break;
     }
     return count;

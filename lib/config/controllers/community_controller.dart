@@ -1,238 +1,54 @@
 // lib/config/controllers/community_controller.dart
 import 'package:flutter/material.dart';
 import '../../models/community_model.dart';
+import '../../services/database_service.dart';
 
 class CommunityController extends ChangeNotifier {
-  CommunityController() {
-    _initializeCommunities();
-    _initializeSamplePlants();
-  }
+  final DatabaseService _db = DatabaseService();
 
-  // List of communities
+  // List of communities the current user belongs to
   final List<Community> _communities = [];
   final Map<String, List<CommunityPlant>> _communityPlants = {};
 
-  void _initializeCommunities() {
-    // TODO: DUMMY DATA - In production, replace all imageUrl values with user-uploaded images
-    // These Unsplash URLs are placeholder images for development/demo purposes only
-    _communities.addAll([
-      Community(
-        id: 'daily_dose_ai',
-        name: 'Daily Dose of AI ⚡',
-        description: 'A community for AI enthusiasts learning about plants',
-        memberCount: 1247,
-        plantCount: 0,
-        imageUrl:
-            'https://images.unsplash.com/photo-1466692476868-aef1dfb1e735?auto=format&fit=crop&w=800', // PLACEHOLDER - Replace with user upload
-        category: 'Education',
-        createdAt: DateTime(2025, 1, 15),
-      ),
-      Community(
-        id: 'announcements',
-        name: 'Announcements',
-        description: 'Official announcements and updates for plant care',
-        memberCount: 3456,
-        plantCount: 0,
-        imageUrl:
-            'https://images.unsplash.com/photo-1542601906990-b4d3fb778b09?auto=format&fit=crop&w=800',
-        category: 'Official',
-        createdAt: DateTime(2025, 1, 10),
-      ),
-      Community(
-        id: 'beginner_to_advance',
-        name: 'Beginner to Advance',
-        description: 'Growing together from novice to expert gardeners',
-        memberCount: 892,
-        plantCount: 0,
-        imageUrl:
-            'https://images.unsplash.com/photo-1416879595882-3373a0480b5b?auto=format&fit=crop&w=800',
-        category: 'Learning',
-        createdAt: DateTime(2025, 1, 20),
-      ),
-      Community(
-        id: 'online_work_nust',
-        name: 'Online Work NUST',
-        description: 'NUST students collaborative plantation project',
-        memberCount: 567,
-        plantCount: 0,
-        imageUrl:
-            'https://images.unsplash.com/photo-1463936575829-25148e1db1b8?auto=format&fit=crop&w=800',
-        category: 'University',
-        createdAt: DateTime(2024, 12, 5),
-      ),
-      Community(
-        id: 'nustians_engineering',
-        name: 'Nustians - Engineering',
-        description: 'Engineering students making campus greener',
-        memberCount: 423,
-        plantCount: 0,
-        imageUrl:
-            'https://images.unsplash.com/photo-1473448912268-2022ce9509d8?auto=format&fit=crop&w=800',
-        category: 'University',
-        createdAt: DateTime(2025, 1, 25),
-      ),
-      Community(
-        id: 'urban_gardeners',
-        name: 'Urban Gardeners',
-        description: 'Bringing nature back to city spaces',
-        memberCount: 1834,
-        plantCount: 0,
-        imageUrl:
-            'https://images.unsplash.com/photo-1591958911259-bee2173bdccc?auto=format&fit=crop&w=800',
-        category: 'Urban',
-        createdAt: DateTime(2024, 11, 15),
-      ),
-    ]);
+  bool _isLoading = false;
+  bool get isLoading => _isLoading;
+
+  /// Load all communities that the given [userId] is a member of from Appwrite.
+  Future<void> loadUserCommunities(String userId) async {
+    if (userId.isEmpty) return;
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // 1. Get membership records for this user
+      final memberships = await _db.listUserMemberships(userId);
+
+      // 2. Fetch full Community doc for each membership
+      final List<Community> loaded = [];
+      for (final m in memberships) {
+        final community = await _db.getCommunity(m.communityId);
+        if (community != null) {
+          loaded.add(community);
+        }
+      }
+
+      _communities
+        ..clear()
+        ..addAll(loaded);
+    } catch (e) {
+      debugPrint('CommunityController.loadUserCommunities failed: $e');
+    }
+
+    _isLoading = false;
+    notifyListeners();
   }
 
-  void _initializeSamplePlants() {
-    // TODO: DUMMY DATA - All plant images below are placeholders for demo purposes
-    // In production, these should be replaced with actual user-uploaded plant photos
-    // Daily Dose of AI community plants
-    _communityPlants['daily_dose_ai'] = [
-      CommunityPlant(
-        id: 'plant_dd_001',
-        communityId: 'daily_dose_ai',
-        plantName: 'Neem Tree',
-        scientificName: 'Azadirachta indica',
-        plantedBy: 'user_001',
-        plantedByUsername: 'Ahmed Khan',
-        plantedByAvatar: 'https://randomuser.me/api/portraits/men/32.jpg',
-        location: 'Islamabad, Pakistan',
-        latitude: 33.6844,
-        longitude: 73.0479,
-        imageUrl:
-            'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=800',
-        plantedDate: DateTime(2025, 1, 20),
-        status: 'Healthy',
-        category: 'Tree',
-        description: 'Young neem tree planted for medicinal purposes',
-        likeCount: 24,
-        commentCount: 5,
-        tags: ['medicinal', 'native', 'beneficial'],
-      ),
-      CommunityPlant(
-        id: 'plant_dd_002',
-        communityId: 'daily_dose_ai',
-        plantName: 'Rose Bush',
-        scientificName: 'Rosa damascena',
-        plantedBy: 'user_002',
-        plantedByUsername: 'Fatima Ali',
-        plantedByAvatar: 'https://randomuser.me/api/portraits/women/44.jpg',
-        location: 'Lahore, Pakistan',
-        latitude: 31.5204,
-        longitude: 74.3587,
-        imageUrl:
-            'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800',
-        plantedDate: DateTime(2025, 1, 22),
-        status: 'Flowering',
-        category: 'Shrub',
-        description: 'Beautiful pink roses blooming this season',
-        likeCount: 48,
-        commentCount: 12,
-        tags: ['flowering', 'fragrant', 'ornamental'],
-      ),
-      CommunityPlant(
-        id: 'plant_dd_003',
-        communityId: 'daily_dose_ai',
-        plantName: 'Basil',
-        scientificName: 'Ocimum basilicum',
-        plantedBy: 'user_003',
-        plantedByUsername: 'Sara Malik',
-        plantedByAvatar: 'https://randomuser.me/api/portraits/women/68.jpg',
-        location: 'Karachi, Pakistan',
-        latitude: 24.8607,
-        longitude: 67.0011,
-        imageUrl:
-            'https://images.unsplash.com/photo-1618375569909-3c8616cf7733?auto=format&fit=crop&w=800',
-        plantedDate: DateTime(2025, 1, 18),
-        status: 'Growing',
-        category: 'Herb',
-        description: 'Fresh basil for cooking and tea',
-        likeCount: 15,
-        commentCount: 3,
-        tags: ['herb', 'culinary', 'aromatic'],
-      ),
-    ];
-
-    // Online Work NUST plants
-    _communityPlants['online_work_nust'] = [
-      CommunityPlant(
-        id: 'plant_nust_001',
-        communityId: 'online_work_nust',
-        plantName: 'Mango Tree',
-        scientificName: 'Mangifera indica',
-        plantedBy: 'user_004',
-        plantedByUsername: 'Ali Hassan',
-        plantedByAvatar: 'https://randomuser.me/api/portraits/men/45.jpg',
-        location: 'NUST Campus, Islamabad',
-        latitude: 33.6425,
-        longitude: 72.9897,
-        imageUrl:
-            'https://images.unsplash.com/photo-1605027990121-cbae9d3b5b1f?auto=format&fit=crop&w=800',
-        plantedDate: DateTime(2025, 1, 10),
-        status: 'Healthy',
-        category: 'Tree',
-        description: 'Mango tree planted near the library',
-        likeCount: 67,
-        commentCount: 18,
-        tags: ['fruit', 'campus', 'native'],
-      ),
-      CommunityPlant(
-        id: 'plant_nust_002',
-        communityId: 'online_work_nust',
-        plantName: 'Sunflower',
-        scientificName: 'Helianthus annuus',
-        plantedBy: 'user_005',
-        plantedByUsername: 'Zainab Ahmed',
-        plantedByAvatar: 'https://randomuser.me/api/portraits/women/22.jpg',
-        location: 'NUST H-12 Campus',
-        latitude: 33.6425,
-        longitude: 72.9897,
-        imageUrl:
-            'https://images.unsplash.com/photo-1597848212624-e66cb8b3a994?auto=format&fit=crop&w=800',
-        plantedDate: DateTime(2025, 1, 15),
-        status: 'Flowering',
-        category: 'Flower',
-        description: 'Bright sunflowers adding color to campus',
-        likeCount: 92,
-        commentCount: 24,
-        tags: ['flowering', 'bright', 'annual'],
-      ),
-    ];
-
-    // Urban Gardeners plants
-    _communityPlants['urban_gardeners'] = [
-      CommunityPlant(
-        id: 'plant_ug_001',
-        communityId: 'urban_gardeners',
-        plantName: 'Ficus Tree',
-        scientificName: 'Ficus religiosa',
-        plantedBy: 'user_006',
-        plantedByUsername: 'Imran Sheikh',
-        plantedByAvatar: 'https://randomuser.me/api/portraits/men/67.jpg',
-        location: 'F-7 Islamabad',
-        latitude: 33.7102,
-        longitude: 73.0498,
-        imageUrl:
-            'https://images.unsplash.com/photo-1509937528035-ad76254b0356?auto=format&fit=crop&w=800',
-        plantedDate: DateTime(2024, 12, 5),
-        status: 'Healthy',
-        category: 'Tree',
-        description: 'Sacred fig tree for urban cooling',
-        likeCount: 156,
-        commentCount: 34,
-        tags: ['shade', 'urban', 'sacred'],
-      ),
-    ];
-
-    // Update plant counts
-    for (var community in _communities) {
-      final plants = _communityPlants[community.id] ?? [];
-      final updatedCommunity = community.copyWith(plantCount: plants.length);
-      final index = _communities.indexOf(community);
-      _communities[index] = updatedCommunity;
-    }
+  /// Add a community to the in-memory list (used after QR auto-join).
+  void addCommunityLocally(Community community) {
+    // Avoid duplicates
+    if (_communities.any((c) => c.id == community.id)) return;
+    _communities.add(community);
+    notifyListeners();
   }
 
   // Get all communities

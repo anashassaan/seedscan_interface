@@ -29,9 +29,10 @@ class ManageUsersView extends StatelessWidget {
                 onPressed: () => Navigator.pop(context),
                 child: const Text('Cancel')),
             ElevatedButton(
-              onPressed: () {
-                admin.updateUserRole(communityIndex, userIndex, selectedRole);
-                Navigator.pop(context);
+              onPressed: () async {
+                await admin.updateUserRole(
+                    communityIndex, userIndex, selectedRole);
+                if (context.mounted) Navigator.pop(context);
               },
               child: const Text('Update'),
             ),
@@ -82,11 +83,11 @@ class ManageUsersView extends StatelessWidget {
               onPressed: () => Navigator.pop(context),
               child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (formKey.currentState!.validate()) {
-                admin.addUserToCommunity(
+                await admin.addUserToCommunity(
                     0, nameController.text, emailController.text);
-                Navigator.pop(context);
+                if (context.mounted) Navigator.pop(context);
               }
             },
             child: const Text('Create'),
@@ -140,11 +141,11 @@ class ManageUsersView extends StatelessWidget {
                         "${user.email} • ${user.role}\nIn: ${admin.communities[cIdx].name}"),
                     isThreeLine: true,
                     trailing: PopupMenuButton<String>(
-                      onSelected: (value) {
+                      onSelected: (value) async {
                         if (value == 'edit') {
                           _showEditRoleDialog(context, cIdx, uIdx, user.role);
                         } else if (value == 'delete') {
-                          admin.removeUserFromCommunity(cIdx, uIdx);
+                          await admin.removeUserFromCommunity(cIdx, uIdx);
                         }
                       },
                       itemBuilder: (context) => [

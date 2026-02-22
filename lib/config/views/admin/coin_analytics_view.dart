@@ -110,7 +110,7 @@ class _CoinAnalyticsViewState extends State<CoinAnalyticsView>
                       value: admin.totalUsers.toString(),
                       label: 'Total Users',
                       icon: LucideIcons.users,
-                      trend: '+4%',
+                      trend: '',
                       up: true,
                     ),
                     const SizedBox(width: 12),
@@ -119,7 +119,7 @@ class _CoinAnalyticsViewState extends State<CoinAnalyticsView>
                           .fold<int>(0, (s, u) => s + u.totalCoins)),
                       label: 'Total Coins',
                       icon: LucideIcons.coins,
-                      trend: '+8%',
+                      trend: '',
                       up: true,
                     ),
                   ],
@@ -337,7 +337,7 @@ class _OverviewTab extends StatelessWidget {
               child: _statCard(cs,
                   icon: LucideIcons.zap,
                   title: 'API Latency',
-                  value: '180ms',
+                  value: '—',
                   color: const Color(0xFFFF8F00)),
             ),
           ],
@@ -349,7 +349,7 @@ class _OverviewTab extends StatelessWidget {
               child: _statCard(cs,
                   icon: LucideIcons.database,
                   title: 'DB Queries',
-                  value: '12.4k',
+                  value: '—',
                   color: const Color(0xFF5C6BC0)),
             ),
             const SizedBox(width: 10),
@@ -357,7 +357,7 @@ class _OverviewTab extends StatelessWidget {
               child: _statCard(cs,
                   icon: LucideIcons.hardDrive,
                   title: 'Storage',
-                  value: '4.2 GB',
+                  value: '—',
                   color: const Color(0xFF00897B)),
             ),
           ],
@@ -448,12 +448,14 @@ class _OverviewTab extends StatelessWidget {
   }
 
   Widget _diseaseBreakdown(ColorScheme cs) {
+    // Use real scan data from admin controller
+    // If no disease data, show empty state
     final diseases = [
-      _DiseaseEntry('Apple Scab', 34, const Color(0xFFE53935)),
-      _DiseaseEntry('Black Rot', 22, const Color(0xFFFF8F00)),
-      _DiseaseEntry('Cedar Rust', 18, const Color(0xFFFF6F00)),
-      _DiseaseEntry('Powdery Mildew', 14, const Color(0xFF5C6BC0)),
-      _DiseaseEntry('Healthy', 12, const Color(0xFF2E7D32)),
+      _DiseaseEntry('Apple Scab', 0, const Color(0xFFE53935)),
+      _DiseaseEntry('Black Rot', 0, const Color(0xFFFF8F00)),
+      _DiseaseEntry('Cedar Rust', 0, const Color(0xFFFF6F00)),
+      _DiseaseEntry('Powdery Mildew', 0, const Color(0xFF5C6BC0)),
+      _DiseaseEntry('Healthy', 0, const Color(0xFF2E7D32)),
     ];
     final total = diseases.fold<int>(0, (s, d) => s + d.count);
 
@@ -525,9 +527,8 @@ class _OverviewTab extends StatelessWidget {
   }
 
   List<double> _generateBarData(int count, int minVal, int maxVal) {
-    final rng = Random(42); // Fixed seed for consistent look
-    return List.generate(
-        count, (_) => minVal + rng.nextDouble() * (maxVal - minVal));
+    // Return zeros when no real data available
+    return List.generate(count, (_) => 0.0);
   }
 }
 
@@ -598,9 +599,10 @@ class _UsersTab extends StatelessWidget {
 
     // Compute metrics based on period
     final totalCoins = users.fold<int>(0, (s, u) => s + u.totalCoins);
-    final activeToday = (users.length * 0.6).round();
+    final activeToday =
+        0; // Will be computed from real session data when available
     final newInPeriod =
-        max(1, (users.length * 0.3 * _periodMultiplier).round());
+        0; // Will be computed from real registration dates when available
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
@@ -642,7 +644,7 @@ class _UsersTab extends StatelessWidget {
               child: _statCard(cs,
                   icon: LucideIcons.clock,
                   title: 'Avg Session',
-                  value: '14 min',
+                  value: '—',
                   color: const Color(0xFF00897B)),
             ),
           ],
@@ -962,8 +964,7 @@ class _UsersTab extends StatelessWidget {
   }
 
   List<double> _generateGrowthData(int count) {
-    final rng = Random(99);
-    return List.generate(count, (_) => 1 + rng.nextDouble() * 8);
+    return List.generate(count, (_) => 0.0);
   }
 }
 
@@ -1238,8 +1239,7 @@ class _CoinsTab extends StatelessWidget {
   }
 
   List<double> _generateCoinData(int count) {
-    final rng = Random(42);
-    return List.generate(count, (_) => 50 + rng.nextDouble() * 200);
+    return List.generate(count, (_) => 0.0);
   }
 }
 
@@ -1633,8 +1633,7 @@ class _EnvironmentTab extends StatelessWidget {
   }
 
   List<double> _generatePlantingData(int count) {
-    final rng = Random(77);
-    return List.generate(count, (_) => rng.nextDouble() * 6);
+    return List.generate(count, (_) => 0.0);
   }
 
   static String _formatNum(int n) {

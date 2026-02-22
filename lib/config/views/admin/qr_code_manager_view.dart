@@ -79,7 +79,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
   }
 
   // ── Generate QR Codes ──────────────────────────────────────────────────
-  void _generateQrCodes() {
+  Future<void> _generateQrCodes() async {
     if (!_formKey.currentState!.validate()) return;
 
     final admin = Provider.of<AdminController>(context, listen: false);
@@ -115,8 +115,8 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
       _isGenerating = false;
     });
 
-    // Store in controller
-    admin.addQrCodes(widget.communityIndex, codes);
+    // Store in controller and persist to Appwrite
+    await admin.addQrCodes(widget.communityIndex, codes);
   }
 
   // ── Render a styled QR card image for gallery save ─────────────────────
@@ -462,7 +462,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
 
               final admin =
                   Provider.of<AdminController>(context, listen: false);
-              admin.markQrCodesUploaded(widget.communityIndex);
+              await admin.markQrCodesUploaded(widget.communityIndex);
 
               if (mounted) {
                 setState(() => _isSaving = false);
@@ -518,7 +518,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
   }
 
   // ── Import CSV QR Codes ─────────────────────────────────────────────────
-  void _importCsvCodes() {
+  Future<void> _importCsvCodes() async {
     if (_csvData.isEmpty) return;
 
     final admin = Provider.of<AdminController>(context, listen: false);
@@ -582,7 +582,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
     }
 
     if (codes.isNotEmpty) {
-      admin.addQrCodes(widget.communityIndex, codes);
+      await admin.addQrCodes(widget.communityIndex, codes);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${codes.length} QR codes imported from CSV'),
@@ -633,7 +633,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
 
               final admin =
                   Provider.of<AdminController>(context, listen: false);
-              admin.markQrCodesUploaded(widget.communityIndex);
+              await admin.markQrCodesUploaded(widget.communityIndex);
 
               if (mounted) {
                 setState(() => _isSaving = false);

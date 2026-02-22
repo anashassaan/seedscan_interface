@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../../controllers/auth_controller.dart';
 import '../common/custom_button.dart';
 import '../common/custom_text_field.dart';
-import 'signup_view.dart';
+import 'role_selection_view.dart';
 import '../../assets.dart';
 
 class LoginView extends StatefulWidget {
@@ -186,7 +186,7 @@ class _LoginViewState extends State<LoginView> {
                                           Navigator.of(context).push(
                                             MaterialPageRoute(
                                               builder: (_) =>
-                                                  const SignUpView(),
+                                                  const RoleSelectionView(),
                                             ),
                                           );
                                         },

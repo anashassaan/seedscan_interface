@@ -327,8 +327,8 @@ class CommunityPlant {
     required this.status,
     required this.category,
     this.description,
-    required this.likeCount,
-    required this.commentCount,
+    this.likeCount = 0,
+    this.commentCount = 0,
     this.isLiked = false,
     this.tags = const [],
   });

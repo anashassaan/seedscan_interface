@@ -15,16 +15,16 @@ class AIModelUpdatesView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Active Model: disease_classifier.tflite',
+            Text('Active Model: mobilenetv3_apple_disease.tflite',
                 style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: cs.onSurface)),
-            Text('Version: 2.1.0 (Deployed 3 days ago)',
+            Text('On-device TFLite model',
                 style: TextStyle(color: cs.onSurface.withOpacity(0.6))),
             const SizedBox(height: 30),
-            _buildModelStat(context, 'Average Accuracy', '94.2%'),
-            _buildModelStat(context, 'Inference Time', '120ms'),
+            _buildModelStat(context, 'Average Accuracy', '—'),
+            _buildModelStat(context, 'Inference Time', '—'),
             const Spacer(),
             CustomButton(
               onPressed: () {},

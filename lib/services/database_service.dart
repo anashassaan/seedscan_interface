@@ -279,6 +279,12 @@ class DatabaseService {
         'is_active': true,
         'created_at': DateTime.now().toIso8601String(),
       },
+      permissions: [
+        'read("users")',
+        'create("users")',
+        'update("users")',
+        'delete("users")',
+      ],
     );
     return Community.fromJson(doc.data);
   }
@@ -333,6 +339,11 @@ class DatabaseService {
         'role': role,
         'joined_at': DateTime.now().toIso8601String(),
       },
+      permissions: [
+        'read("users")',
+        'update("users")',
+        'delete("users")',
+      ],
     );
     return CommunityMember.fromJson(doc.data);
   }
@@ -356,6 +367,31 @@ class DatabaseService {
     return (res.documents as List)
         .map((d) => CommunityMember.fromJson(d.data))
         .toList();
+  }
+
+  /// Check whether [userId] is already a member of [communityId].
+  Future<bool> isUserInCommunity(String communityId, String userId) async {
+    final res = await _appwrite.getDocuments(
+      collectionId: AppwriteConstants.communityMembersCollection,
+      queries: [
+        Query.equal('community_id', communityId),
+        Query.equal('user_id', userId),
+        Query.limit(1),
+      ],
+    );
+    return (res.documents as List).isNotEmpty;
+  }
+
+  /// Increment the member_count on a community document.
+  Future<void> incrementCommunityMemberCount(String communityId) async {
+    final community = await getCommunity(communityId);
+    if (community != null) {
+      await _appwrite.updateDocument(
+        collectionId: AppwriteConstants.communitiesCollection,
+        documentId: communityId,
+        data: {'member_count': community.memberCount + 1},
+      );
+    }
   }
 
   // ---------------------------------------------------------------------------

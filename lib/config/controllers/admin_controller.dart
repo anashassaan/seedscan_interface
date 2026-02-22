@@ -1,4 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
+import '../../services/admin_database_service.dart';
+import '../../models/user_model.dart';
+import '../../models/community_model.dart';
 
 // 1. Model for individual planting records
 class PlantStat {
@@ -15,24 +18,71 @@ class PlantStat {
     this.coinsEarned = 0,
     this.date,
   });
+
+  /// Create from an Appwrite activity_logs document.
+  factory PlantStat.fromActivityLog(Map<String, dynamic> json) {
+    return PlantStat(
+      type: json['plant_species'] ?? json['action_type'] ?? 'Unknown',
+      action: _mapActionType(json['action_type'] ?? ''),
+      count: 1,
+      coinsEarned: json['coins_awarded'] ?? 0,
+      date: json['created_at'] != null || json['\$createdAt'] != null
+          ? DateTime.tryParse(json['created_at'] ?? json['\$createdAt'] ?? '')
+          : DateTime.now(),
+    );
+  }
+
+  static String _mapActionType(String actionType) {
+    switch (actionType) {
+      case 'water':
+        return 'Watering';
+      case 'scan_disease':
+        return 'Health Scan';
+      case 'register':
+        return 'Planting';
+      default:
+        return actionType.isNotEmpty
+            ? actionType[0].toUpperCase() + actionType.substring(1)
+            : 'Activity';
+    }
+  }
 }
 
 // 2. Updated User Model with Reinforced Coin Logic
 class AppUser {
+  final String id; // Appwrite document ID
   final String name;
   final String email;
   String role;
   final List<PlantStat> stats;
+  final int walletBalance;
 
   AppUser({
+    this.id = '',
     required this.name,
     required this.email,
     this.role = 'User',
     this.stats = const [],
+    this.walletBalance = 0,
   });
+
+  /// Create from Appwrite UserModel + optional role from CommunityMember.
+  factory AppUser.fromUserModel(UserModel user,
+      {String role = 'User', List<PlantStat> stats = const []}) {
+    return AppUser(
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: role,
+      stats: stats,
+      walletBalance: user.walletBalance,
+    );
+  }
 
   // Reinforced getter to prevent Null Check Operator errors
   int get totalCoins {
+    // Prefer wallet balance from Appwrite if available
+    if (walletBalance > 0) return walletBalance;
     if (stats.isEmpty) return 0;
     try {
       return stats.fold<int>(0, (int sum, item) {
@@ -46,35 +96,60 @@ class AppUser {
   }
 }
 
-// 3. Community Model (Admin-specific, separate from app's Community model)
+// 3. Community Model (Admin-specific, wraps the Appwrite Community model)
 class AdminCommunity {
+  final String id; // Appwrite document ID
   final String name;
   final String location;
   final String description;
   final String createdBy;
-  final String? imagePath;
+  final String? imagePath; // Local file path (used for newly picked images)
+  final String? imageUrl; // Remote URL from Appwrite storage
   final String category;
   final bool isActive;
   final DateTime createdAt;
   final List<AppUser> members;
 
+  /// Returns the best available image source (URL preferred over local path).
+  String? get displayImage => imageUrl ?? imagePath;
+  bool get hasNetworkImage => imageUrl != null && imageUrl!.isNotEmpty;
+
   AdminCommunity({
+    this.id = '',
     required this.name,
     required this.location,
     this.description = '',
     this.createdBy = 'Admin',
     this.imagePath,
+    this.imageUrl,
     this.category = 'General',
     this.isActive = true,
     DateTime? createdAt,
     required this.members,
   }) : createdAt = createdAt ?? DateTime.now();
+
+  /// Create from Appwrite Community model with loaded members.
+  factory AdminCommunity.fromCommunity(Community community,
+      {List<AppUser> members = const [], String? creatorName}) {
+    return AdminCommunity(
+      id: community.id,
+      name: community.name,
+      location: community.description ?? '',
+      description: community.description ?? '',
+      createdBy: creatorName ?? community.creatorId,
+      imageUrl: community.imageUrl,
+      category: community.category,
+      isActive: community.isActive,
+      createdAt: community.createdAt,
+      members: members,
+    );
+  }
 }
 
 // 4. QR Code Model for plant tracking
 class PlantQrCode {
   final String id; // Unique QR ID
-  final String communityId; // Community name as ID
+  final String communityId; // Community document ID
   final String communityName;
   final String plantName;
   final String plantType; // e.g. Tree, Shrub, Herb, Climber, Grass
@@ -84,6 +159,7 @@ class PlantQrCode {
   final String? plantAge; // Only applicable when isSeed == false
   final DateTime generatedAt;
   bool isUploaded;
+  String? appwriteDocId; // Appwrite document ID for persistence
 
   PlantQrCode({
     required this.id,
@@ -97,6 +173,7 @@ class PlantQrCode {
     this.plantAge,
     DateTime? generatedAt,
     this.isUploaded = false,
+    this.appwriteDocId,
   }) : generatedAt = generatedAt ?? DateTime.now();
 
   /// The data encoded in the QR code
@@ -107,6 +184,39 @@ class PlantQrCode {
 
   /// Short label for display
   String get displayLabel => plantName.isNotEmpty ? plantName : id;
+
+  /// Create from Appwrite document.
+  factory PlantQrCode.fromJson(Map<String, dynamic> json) {
+    return PlantQrCode(
+      id: json['id'] ?? json['\$id'] ?? '',
+      communityId: json['community_id'] ?? '',
+      communityName: json['community_name'] ?? '',
+      plantName: json['plant_name'] ?? '',
+      plantType: json['plant_type'] ?? '',
+      bestSeason: json['best_season'] ?? '',
+      notes: json['notes'] ?? '',
+      isSeed: json['is_seed'] ?? true,
+      plantAge: json['plant_age'],
+      generatedAt: json['created_at'] != null
+          ? DateTime.tryParse(json['created_at']) ?? DateTime.now()
+          : DateTime.now(),
+      isUploaded: json['is_uploaded'] ?? false,
+      appwriteDocId: json['id'] ?? json['\$id'],
+    );
+  }
+
+  /// Convert to a map for Appwrite storage.
+  Map<String, dynamic> toJson() {
+    return {
+      'plantName': plantName,
+      'plantType': plantType,
+      'bestSeason': bestSeason,
+      'notes': notes,
+      'isSeed': isSeed,
+      'plantAge': plantAge,
+      'qrData': qrData,
+    };
+  }
 
   @override
   String toString() =>
@@ -121,578 +231,42 @@ class AdminController extends ChangeNotifier {
       "com.example.seedscan.daily_reminder";
   static const String reminderTaskName = "dailyPlantCareNotification";
 
-  // Initial Data - Large dummy data set
-  final List<AdminCommunity> _communities = [
-    AdminCommunity(
-      name: "Green Valley",
-      location: "Northern Sector",
-      description:
-          "A thriving community focused on native tree planting and environmental restoration in the northern highlands.",
-      createdBy: "Admin User",
-      imagePath: null,
-      category: "Reforestation",
-      isActive: true,
-      createdAt: DateTime.now().subtract(const Duration(days: 120)),
-      members: [
-        AppUser(
-          name: "Admin User",
-          email: "admin@seedscan.com",
-          role: "Admin",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Planting",
-                count: 15,
-                coinsEarned: 750,
-                date: DateTime.now().subtract(const Duration(days: 30))),
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 45,
-                coinsEarned: 450,
-                date: DateTime.now().subtract(const Duration(days: 2))),
-            PlantStat(
-                type: "Oak",
-                action: "Planting",
-                count: 8,
-                coinsEarned: 400,
-                date: DateTime.now().subtract(const Duration(days: 15))),
-            PlantStat(
-                type: "Pine",
-                action: "Watering",
-                count: 30,
-                coinsEarned: 300,
-                date: DateTime.now().subtract(const Duration(hours: 5))),
-          ],
-        ),
-        AppUser(
-          name: "Sarah Johnson",
-          email: "sarah.j@seedscan.com",
-          role: "Moderator",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 32,
-                coinsEarned: 320,
-                date: DateTime.now().subtract(const Duration(days: 3))),
-            PlantStat(
-                type: "Cherry",
-                action: "Planting",
-                count: 12,
-                coinsEarned: 600,
-                date: DateTime.now().subtract(const Duration(days: 10))),
-            PlantStat(
-                type: "Maple",
-                action: "Pruning",
-                count: 8,
-                coinsEarned: 160,
-                date: DateTime.now().subtract(const Duration(days: 1))),
-          ],
-        ),
-        AppUser(
-          name: "Michael Chen",
-          email: "mike.chen@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 28,
-                coinsEarned: 280,
-                date: DateTime.now().subtract(const Duration(days: 5))),
-            PlantStat(
-                type: "Pear",
-                action: "Planting",
-                count: 6,
-                coinsEarned: 300,
-                date: DateTime.now().subtract(const Duration(days: 20))),
-          ],
-        ),
-        AppUser(
-          name: "Emily Davis",
-          email: "emily.d@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 18,
-                coinsEarned: 180,
-                date: DateTime.now().subtract(const Duration(days: 7))),
-            PlantStat(
-                type: "Walnut",
-                action: "Planting",
-                count: 4,
-                coinsEarned: 200,
-                date: DateTime.now().subtract(const Duration(days: 25))),
-          ],
-        ),
-        AppUser(
-          name: "James Wilson",
-          email: "james.w@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 22,
-                coinsEarned: 220,
-                date: DateTime.now().subtract(const Duration(days: 4))),
-          ],
-        ),
-      ],
-    ),
-    AdminCommunity(
-      name: "Urban Jungle",
-      location: "City Center",
-      description:
-          "Urban gardening enthusiasts transforming city spaces into green oases with bonsai and indoor plants.",
-      createdBy: "Admin User",
-      imagePath: null,
-      category: "Urban Gardening",
-      isActive: true,
-      createdAt: DateTime.now().subtract(const Duration(days: 90)),
-      members: [
-        AppUser(
-          name: "Test User",
-          email: "user@test.com",
-          role: "Admin",
-          stats: [
-            PlantStat(
-                type: "Bonsai",
-                action: "Health Scan",
-                count: 40,
-                coinsEarned: 400,
-                date: DateTime.now().subtract(const Duration(days: 1))),
-            PlantStat(
-                type: "Ficus",
-                action: "Planting",
-                count: 25,
-                coinsEarned: 1250,
-                date: DateTime.now().subtract(const Duration(days: 14))),
-            PlantStat(
-                type: "Succulent",
-                action: "Watering",
-                count: 60,
-                coinsEarned: 600,
-                date: DateTime.now()),
-          ],
-        ),
-        AppUser(
-          name: "Lisa Park",
-          email: "lisa.park@email.com",
-          role: "Moderator",
-          stats: [
-            PlantStat(
-                type: "Snake Plant",
-                action: "Health Scan",
-                count: 35,
-                coinsEarned: 350,
-                date: DateTime.now().subtract(const Duration(days: 2))),
-            PlantStat(
-                type: "Pothos",
-                action: "Planting",
-                count: 18,
-                coinsEarned: 900,
-                date: DateTime.now().subtract(const Duration(days: 8))),
-          ],
-        ),
-        AppUser(
-          name: "David Kim",
-          email: "david.k@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Monstera",
-                action: "Health Scan",
-                count: 20,
-                coinsEarned: 200,
-                date: DateTime.now().subtract(const Duration(days: 3))),
-            PlantStat(
-                type: "Philodendron",
-                action: "Planting",
-                count: 10,
-                coinsEarned: 500,
-                date: DateTime.now().subtract(const Duration(days: 12))),
-          ],
-        ),
-        AppUser(
-          name: "Anna Lee",
-          email: "anna.lee@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "ZZ Plant",
-                action: "Health Scan",
-                count: 15,
-                coinsEarned: 150,
-                date: DateTime.now().subtract(const Duration(days: 6))),
-          ],
-        ),
-      ],
-    ),
-    AdminCommunity(
-      name: "Sunrise Farms",
-      location: "Eastern District",
-      description:
-          "Agricultural community specializing in fruit orchards and sustainable farming practices.",
-      createdBy: "Robert Miller",
-      imagePath: null,
-      category: "Agriculture",
-      isActive: true,
-      createdAt: DateTime.now().subtract(const Duration(days: 180)),
-      members: [
-        AppUser(
-          name: "Robert Miller",
-          email: "robert.m@sunrisefarms.com",
-          role: "Admin",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 85,
-                coinsEarned: 850,
-                date: DateTime.now().subtract(const Duration(days: 1))),
-            PlantStat(
-                type: "Apple Tree",
-                action: "Planting",
-                count: 50,
-                coinsEarned: 2500,
-                date: DateTime.now().subtract(const Duration(days: 60))),
-            PlantStat(
-                type: "Peach",
-                action: "Pruning",
-                count: 30,
-                coinsEarned: 600,
-                date: DateTime.now().subtract(const Duration(days: 5))),
-          ],
-        ),
-        AppUser(
-          name: "Maria Garcia",
-          email: "maria.g@sunrisefarms.com",
-          role: "Moderator",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 62,
-                coinsEarned: 620,
-                date: DateTime.now().subtract(const Duration(days: 2))),
-            PlantStat(
-                type: "Plum",
-                action: "Planting",
-                count: 20,
-                coinsEarned: 1000,
-                date: DateTime.now().subtract(const Duration(days: 30))),
-          ],
-        ),
-        AppUser(
-          name: "Carlos Rodriguez",
-          email: "carlos.r@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 45,
-                coinsEarned: 450,
-                date: DateTime.now().subtract(const Duration(days: 3))),
-            PlantStat(
-                type: "Apricot",
-                action: "Watering",
-                count: 40,
-                coinsEarned: 400,
-                date: DateTime.now().subtract(const Duration(days: 1))),
-          ],
-        ),
-        AppUser(
-          name: "Sofia Martinez",
-          email: "sofia.m@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 38,
-                coinsEarned: 380,
-                date: DateTime.now().subtract(const Duration(days: 4))),
-          ],
-        ),
-        AppUser(
-          name: "Diego Lopez",
-          email: "diego.l@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 28,
-                coinsEarned: 280,
-                date: DateTime.now().subtract(const Duration(days: 6))),
-            PlantStat(
-                type: "Nectarine",
-                action: "Planting",
-                count: 8,
-                coinsEarned: 400,
-                date: DateTime.now().subtract(const Duration(days: 45))),
-          ],
-        ),
-        AppUser(
-          name: "Isabella Hernandez",
-          email: "isabella.h@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 22,
-                coinsEarned: 220,
-                date: DateTime.now().subtract(const Duration(days: 8))),
-          ],
-        ),
-      ],
-    ),
-    AdminCommunity(
-      name: "Mountain View Gardens",
-      location: "Western Hills",
-      description:
-          "High-altitude gardening community focused on cold-resistant varieties and alpine plants.",
-      createdBy: "Emma Thompson",
-      imagePath: null,
-      category: "Alpine Gardening",
-      isActive: true,
-      createdAt: DateTime.now().subtract(const Duration(days: 150)),
-      members: [
-        AppUser(
-          name: "Emma Thompson",
-          email: "emma.t@mvgardens.com",
-          role: "Admin",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 55,
-                coinsEarned: 550,
-                date: DateTime.now().subtract(const Duration(days: 2))),
-            PlantStat(
-                type: "Spruce",
-                action: "Planting",
-                count: 35,
-                coinsEarned: 1750,
-                date: DateTime.now().subtract(const Duration(days: 40))),
-            PlantStat(
-                type: "Juniper",
-                action: "Pruning",
-                count: 20,
-                coinsEarned: 400,
-                date: DateTime.now().subtract(const Duration(days: 7))),
-          ],
-        ),
-        AppUser(
-          name: "William Brown",
-          email: "will.b@mvgardens.com",
-          role: "Moderator",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 42,
-                coinsEarned: 420,
-                date: DateTime.now().subtract(const Duration(days: 3))),
-            PlantStat(
-                type: "Blue Spruce",
-                action: "Planting",
-                count: 15,
-                coinsEarned: 750,
-                date: DateTime.now().subtract(const Duration(days: 25))),
-          ],
-        ),
-        AppUser(
-          name: "Olivia Taylor",
-          email: "olivia.t@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 30,
-                coinsEarned: 300,
-                date: DateTime.now().subtract(const Duration(days: 5))),
-            PlantStat(
-                type: "Mountain Ash",
-                action: "Watering",
-                count: 25,
-                coinsEarned: 250,
-                date: DateTime.now().subtract(const Duration(days: 2))),
-          ],
-        ),
-        AppUser(
-          name: "Benjamin Clark",
-          email: "ben.c@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 25,
-                coinsEarned: 250,
-                date: DateTime.now().subtract(const Duration(days: 9))),
-          ],
-        ),
-        AppUser(
-          name: "Charlotte White",
-          email: "charlotte.w@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 18,
-                coinsEarned: 180,
-                date: DateTime.now().subtract(const Duration(days: 11))),
-          ],
-        ),
-      ],
-    ),
-    AdminCommunity(
-      name: "Riverside Orchards",
-      location: "River Valley",
-      description:
-          "Premium fruit orchard community along the riverside with focus on organic apple cultivation.",
-      createdBy: "Thomas Anderson",
-      imagePath: null,
-      category: "Organic Farming",
-      isActive: true,
-      createdAt: DateTime.now().subtract(const Duration(days: 200)),
-      members: [
-        AppUser(
-          name: "Thomas Anderson",
-          email: "thomas.a@riversideorchards.com",
-          role: "Admin",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 120,
-                coinsEarned: 1200,
-                date: DateTime.now().subtract(const Duration(days: 1))),
-            PlantStat(
-                type: "Apple Tree",
-                action: "Planting",
-                count: 80,
-                coinsEarned: 4000,
-                date: DateTime.now().subtract(const Duration(days: 90))),
-            PlantStat(
-                type: "Apple Tree",
-                action: "Fertilizing",
-                count: 60,
-                coinsEarned: 1200,
-                date: DateTime.now().subtract(const Duration(days: 10))),
-          ],
-        ),
-        AppUser(
-          name: "Jennifer Wright",
-          email: "jennifer.w@riversideorchards.com",
-          role: "Moderator",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 95,
-                coinsEarned: 950,
-                date: DateTime.now().subtract(const Duration(days: 2))),
-            PlantStat(
-                type: "Crabapple",
-                action: "Planting",
-                count: 25,
-                coinsEarned: 1250,
-                date: DateTime.now().subtract(const Duration(days: 50))),
-          ],
-        ),
-        AppUser(
-          name: "Daniel Harris",
-          email: "daniel.h@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 72,
-                coinsEarned: 720,
-                date: DateTime.now().subtract(const Duration(days: 3))),
-            PlantStat(
-                type: "Apple Tree",
-                action: "Pruning",
-                count: 35,
-                coinsEarned: 700,
-                date: DateTime.now().subtract(const Duration(days: 15))),
-          ],
-        ),
-        AppUser(
-          name: "Megan Scott",
-          email: "megan.s@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 58,
-                coinsEarned: 580,
-                date: DateTime.now().subtract(const Duration(days: 4))),
-          ],
-        ),
-        AppUser(
-          name: "Ryan King",
-          email: "ryan.k@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 45,
-                coinsEarned: 450,
-                date: DateTime.now().subtract(const Duration(days: 6))),
-            PlantStat(
-                type: "Apple Tree",
-                action: "Watering",
-                count: 50,
-                coinsEarned: 500,
-                date: DateTime.now().subtract(const Duration(days: 1))),
-          ],
-        ),
-        AppUser(
-          name: "Ashley Green",
-          email: "ashley.g@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 38,
-                coinsEarned: 380,
-                date: DateTime.now().subtract(const Duration(days: 8))),
-          ],
-        ),
-        AppUser(
-          name: "Kevin Adams",
-          email: "kevin.a@email.com",
-          role: "User",
-          stats: [
-            PlantStat(
-                type: "Apple Tree",
-                action: "Health Scan",
-                count: 32,
-                coinsEarned: 320,
-                date: DateTime.now().subtract(const Duration(days: 12))),
-          ],
-        ),
-      ],
-    ),
-  ];
+  // ── Backend services ───────────────────────────────────────────────────────
+  final AdminDatabaseService _adminDb = AdminDatabaseService();
 
-  // Computed from community data
-  int get _calculatedTotalScans {
+  // ── Local state (populated from Appwrite) ──────────────────────────────────
+  List<AdminCommunity> _communities = [];
+  bool _isInitialized = false;
+  bool _useLocalFallback = false; // true when Appwrite is unreachable
+  String _serverStatus = "Online";
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  // ── Getters ────────────────────────────────────────────────────────────────
+  List<AdminCommunity> get communities => _communities;
+  bool get isInitialized => _isInitialized;
+  String get serverStatus => _serverStatus;
+  bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
+
+  List<AppUser> get allUsers {
+    return _communities.expand((community) => community.members).toList();
+  }
+
+  List<AppUser> get allMembers => allUsers;
+
+  String getCommunityNameForUser(String email) {
+    for (var community in _communities) {
+      if (community.members.any((user) => user.email == email)) {
+        return community.name;
+      }
+    }
+    return "Unknown Community";
+  }
+
+  int get totalUsers => allUsers.length;
+
+  int get totalScans {
     int total = 0;
     for (var community in _communities) {
       for (var member in community.members) {
@@ -706,39 +280,21 @@ class AdminController extends ChangeNotifier {
     return total;
   }
 
-  int get _calculatedDiseasesDetected {
-    // Approximately 15% of scans detect issues
-    return (_calculatedTotalScans * 0.15).round();
-  }
-
-  String _serverStatus = "Online";
-  bool _isLoading = false;
-
-  List<AdminCommunity> get communities => _communities;
-
-  List<AppUser> get allUsers {
-    return _communities.expand((community) => community.members).toList();
-  }
-
-  // Alias for allUsers
-  List<AppUser> get allMembers => allUsers;
-
-  String getCommunityNameForUser(String email) {
+  int get diseasesDetected {
+    int total = 0;
     for (var community in _communities) {
-      if (community.members.any((user) => user.email == email)) {
-        return community.name;
+      for (var member in community.members) {
+        for (var stat in member.stats) {
+          if (stat.action == "Health Scan" ||
+              stat.action == "Disease Detection") {
+            total += stat.count ?? 0;
+          }
+        }
       }
     }
-    return "Unknown Community";
+    return total;
   }
 
-  int get totalUsers => allUsers.length;
-  int get totalScans => _calculatedTotalScans;
-  int get diseasesDetected => _calculatedDiseasesDetected;
-  String get serverStatus => _serverStatus;
-  bool get isLoading => _isLoading;
-
-  // Get total plants (sum of all planting actions)
   int get totalPlants {
     int total = 0;
     for (var community in _communities) {
@@ -753,7 +309,6 @@ class AdminController extends ChangeNotifier {
     return total;
   }
 
-  // Get scans by community
   Map<String, int> get scansByCommunity {
     final Map<String, int> result = {};
     for (var community in _communities) {
@@ -770,98 +325,393 @@ class AdminController extends ChangeNotifier {
     return result;
   }
 
-  // --- Notification & Automation Logic ---
+  // ── Initialization ─────────────────────────────────────────────────────────
+
+  /// Load all admin data from Appwrite. Call once on admin login.
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _loadFromAppwrite();
+      _serverStatus = "Online";
+      _useLocalFallback = false;
+    } catch (e) {
+      debugPrint('AdminController: Appwrite load failed: $e');
+      _serverStatus = "Offline";
+      _useLocalFallback = true;
+      _errorMessage = 'Failed to connect to server. Please try again.';
+    }
+
+    _isInitialized = true;
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  /// Reload all data from the backend.
+  Future<void> refreshStats() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _loadFromAppwrite();
+      _serverStatus = "Online";
+      _useLocalFallback = false;
+    } catch (e) {
+      debugPrint('AdminController: Refresh failed: $e');
+      _errorMessage = 'Failed to refresh data. Using cached data.';
+      _serverStatus = "Offline";
+    }
+
+    _isLoading = false;
+    notifyListeners();
+  }
+
+  /// Core data loading from Appwrite.
+  Future<void> _loadFromAppwrite() async {
+    // 1. Load all communities
+    final communities = await _adminDb.listAllCommunities();
+
+    // 2. Load all users
+    final allUserModels = await _adminDb.listAllUsers();
+    final userMap = {for (var u in allUserModels) u.id: u};
+
+    // 3. Load activity logs for stats
+    final activityLogs = await _adminDb.listAllActivityLogs();
+
+    // Group activity logs by user
+    final userActivityMap = <String, List<PlantStat>>{};
+    for (final log in activityLogs) {
+      final userId = log['user_id'] as String? ?? '';
+      userActivityMap.putIfAbsent(userId, () => []);
+      userActivityMap[userId]!.add(PlantStat.fromActivityLog(log));
+    }
+
+    // 4. For each community, load members and assemble AdminCommunity
+    final adminCommunities = <AdminCommunity>[];
+    for (final community in communities) {
+      final memberDocs = await _adminDb.listCommunityMembers(community.id);
+
+      final members = <AppUser>[];
+      for (final memberDoc in memberDocs) {
+        final user = userMap[memberDoc.userId];
+        if (user != null) {
+          final stats = userActivityMap[user.id] ?? [];
+          members.add(AppUser.fromUserModel(
+            user,
+            role: _formatRole(memberDoc.role),
+            stats: stats,
+          ));
+        }
+      }
+
+      // Resolve creator name
+      final creator = userMap[community.creatorId];
+      adminCommunities.add(AdminCommunity.fromCommunity(
+        community,
+        members: members,
+        creatorName: creator?.name,
+      ));
+    }
+
+    _communities = adminCommunities;
+
+    // 5. Load QR codes for each community
+    _communityQrCodes.clear();
+    for (int i = 0; i < _communities.length; i++) {
+      final qrDocs = await _adminDb.listAdminQrCodes(_communities[i].id);
+      if (qrDocs.isNotEmpty) {
+        _communityQrCodes[i] =
+            qrDocs.map((d) => PlantQrCode.fromJson(d)).toList();
+      }
+    }
+  }
+
+  String _formatRole(String role) {
+    switch (role.toLowerCase()) {
+      case 'admin':
+        return 'Admin';
+      case 'moderator':
+        return 'Moderator';
+      case 'member':
+        return 'User';
+      default:
+        return 'User';
+    }
+  }
+
+  // ── Notification & Automation Logic ────────────────────────────────────────
 
   Future<void> toggleAutoReminder(bool value) async {
     _isAutoReminderEnabled = value;
-    // Mock implementation — in production, integrate a background task scheduler
     debugPrint(
         value ? 'Auto-reminder enabled (24h cycle)' : 'Auto-reminder disabled');
     notifyListeners();
   }
 
-  // --- Community & User Management ---
+  // ── Community Management ───────────────────────────────────────────────────
 
-  void addCommunity({
+  /// Create a new community, persisted to Appwrite.
+  Future<bool> addCommunity({
     required String name,
     required String location,
     String description = '',
     String createdBy = 'Admin',
     String? imagePath,
     String category = 'General',
-  }) {
-    _communities.add(AdminCommunity(
-      name: name,
-      location: location,
-      description: description,
-      createdBy: createdBy,
-      imagePath: imagePath,
-      category: category,
-      members: [],
-    ));
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
     notifyListeners();
-  }
 
-  void addUserToCommunity(int communityIndex, String name, String email) {
-    if (communityIndex >= 0 && communityIndex < _communities.length) {
-      _communities[communityIndex].members.add(
-            AppUser(
-              name: name,
-              email: email,
-              stats: [],
-            ),
+    try {
+      if (!_useLocalFallback) {
+        // Upload image if provided
+        String? imageUrl;
+        if (imagePath != null) {
+          imageUrl = await _adminDb.uploadCommunityImage(imagePath);
+        }
+
+        final community = await _adminDb.createCommunity(
+          name: name,
+          location: location,
+          description: description.isNotEmpty ? description : location,
+          creatorId: createdBy,
+          imageUrl: imageUrl,
+          category: category,
+        );
+
+        _communities.add(AdminCommunity.fromCommunity(
+          community,
+          members: [],
+          creatorName: createdBy,
+        ));
+
+        // Log the action
+        try {
+          await _adminDb.createSystemLog(
+            action: 'Created community: $name',
+            performedBy: createdBy,
           );
+        } catch (_) {}
+
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        // Offline fallback: local only
+        _communities.add(AdminCommunity(
+          name: name,
+          location: location,
+          description: description,
+          createdBy: createdBy,
+          imagePath: imagePath,
+          category: category,
+          members: [],
+        ));
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    } catch (e) {
+      final msg = e.toString();
+      debugPrint('AdminController: Failed to add community: $msg');
+      _errorMessage = 'Failed to create community: $msg';
+      _isLoading = false;
       notifyListeners();
+      return false;
     }
   }
 
-  void deleteCommunity(int index) {
-    if (index >= 0 && index < _communities.length) {
+  /// Add a user to a community, persisted to Appwrite.
+  Future<bool> addUserToCommunity(
+      int communityIndex, String name, String email) async {
+    if (communityIndex < 0 || communityIndex >= _communities.length) {
+      return false;
+    }
+
+    try {
+      if (!_useLocalFallback) {
+        final community = _communities[communityIndex];
+
+        // Find the user by email
+        final allUsersResult = await _adminDb.listAllUsers();
+        final user = allUsersResult.where((u) => u.email == email).firstOrNull;
+
+        if (user != null) {
+          await _adminDb.addMemberToCommunity(
+            communityId: community.id,
+            userId: user.id,
+            role: 'member',
+          );
+
+          _communities[communityIndex].members.add(
+                AppUser.fromUserModel(user, role: 'User'),
+              );
+        } else {
+          // User doesn't exist in Appwrite - add locally only
+          _communities[communityIndex].members.add(
+                AppUser(name: name, email: email, stats: []),
+              );
+        }
+      } else {
+        _communities[communityIndex].members.add(
+              AppUser(name: name, email: email, stats: []),
+            );
+      }
+
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('AdminController: Failed to add user to community: $e');
+      return false;
+    }
+  }
+
+  /// Delete a community, persisted to Appwrite.
+  Future<bool> deleteCommunity(int index) async {
+    if (index < 0 || index >= _communities.length) return false;
+
+    try {
+      final community = _communities[index];
+
+      if (!_useLocalFallback && community.id.isNotEmpty) {
+        final success = await _adminDb.deleteCommunity(community.id);
+        if (!success) {
+          _errorMessage = 'Failed to delete community from server';
+          notifyListeners();
+          return false;
+        }
+
+        await _adminDb.createSystemLog(
+          action: 'Deleted community: ${community.name}',
+          performedBy: 'Admin',
+        );
+      }
+
       _communities.removeAt(index);
+      _communityQrCodes.remove(index);
       notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('AdminController: Failed to delete community: $e');
+      return false;
     }
   }
 
-  void updateUserRole(int communityIndex, int userIndex, String newRole) {
-    if (communityIndex >= 0 && communityIndex < _communities.length) {
-      final members = _communities[communityIndex].members;
-      if (userIndex >= 0 && userIndex < members.length) {
-        members[userIndex].role = newRole;
-        notifyListeners();
+  /// Update a user's role, persisted to Appwrite.
+  Future<bool> updateUserRole(
+      int communityIndex, int userIndex, String newRole) async {
+    if (communityIndex < 0 || communityIndex >= _communities.length) {
+      return false;
+    }
+    final members = _communities[communityIndex].members;
+    if (userIndex < 0 || userIndex >= members.length) return false;
+
+    try {
+      if (!_useLocalFallback) {
+        final community = _communities[communityIndex];
+        final user = members[userIndex];
+
+        // Find the membership document
+        final memberDocs = await _adminDb.listCommunityMembers(community.id);
+        final memberDoc =
+            memberDocs.where((m) => m.userId == user.id).firstOrNull;
+
+        if (memberDoc != null) {
+          final appwriteRole = newRole.toLowerCase() == 'user'
+              ? 'member'
+              : newRole.toLowerCase();
+          await _adminDb.updateMemberRole(
+            memberDocId: memberDoc.id,
+            newRole: appwriteRole,
+          );
+        }
       }
+
+      members[userIndex].role = newRole;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('AdminController: Failed to update user role: $e');
+      return false;
     }
   }
 
-  void removeUserFromCommunity(int communityIndex, int userIndex) {
-    if (communityIndex >= 0 && communityIndex < _communities.length) {
-      final members = _communities[communityIndex].members;
-      if (userIndex >= 0 && userIndex < members.length) {
-        members.removeAt(userIndex);
-        notifyListeners();
+  /// Remove a user from a community, persisted to Appwrite.
+  Future<bool> removeUserFromCommunity(
+      int communityIndex, int userIndex) async {
+    if (communityIndex < 0 || communityIndex >= _communities.length) {
+      return false;
+    }
+    final members = _communities[communityIndex].members;
+    if (userIndex < 0 || userIndex >= members.length) return false;
+
+    try {
+      if (!_useLocalFallback) {
+        final community = _communities[communityIndex];
+        final user = members[userIndex];
+
+        final memberDocs = await _adminDb.listCommunityMembers(community.id);
+        final memberDoc =
+            memberDocs.where((m) => m.userId == user.id).firstOrNull;
+
+        if (memberDoc != null) {
+          await _adminDb.removeMemberFromCommunity(
+            memberDocId: memberDoc.id,
+            communityId: community.id,
+          );
+        }
       }
+
+      members.removeAt(userIndex);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('AdminController: Failed to remove user: $e');
+      return false;
     }
   }
 
-  // --- System Actions ---
+  // ── System Actions ─────────────────────────────────────────────────────────
 
-  Future<void> sendGlobalNotification(String title, String message) async {
+  /// Send a global notification, persisted to Appwrite.
+  Future<bool> sendGlobalNotification(String title, String message) async {
     _isLoading = true;
     notifyListeners();
-    await Future.delayed(const Duration(seconds: 2));
-    _isLoading = false;
-    notifyListeners();
+
+    try {
+      bool success = true;
+      if (!_useLocalFallback) {
+        success = await _adminDb.sendGlobalNotification(
+          title: title,
+          body: message,
+          senderId: 'admin',
+        );
+
+        await _adminDb.createSystemLog(
+          action: 'Sent global notification: $title',
+          performedBy: 'Admin',
+        );
+      } else {
+        await Future.delayed(const Duration(seconds: 1));
+      }
+
+      _isLoading = false;
+      notifyListeners();
+      return success;
+    } catch (e) {
+      _isLoading = false;
+      _errorMessage = 'Failed to send notification: $e';
+      notifyListeners();
+      return false;
+    }
   }
 
-  Future<void> refreshStats() async {
-    _isLoading = true;
-    notifyListeners();
-    await Future.delayed(const Duration(seconds: 1));
-    // Stats are now computed from actual data, just refresh the UI
-    _isLoading = false;
-    notifyListeners();
-  }
-
-  // --- QR Code Management ---
+  // ── QR Code Management ────────────────────────────────────────────────────
 
   final Map<int, List<PlantQrCode>> _communityQrCodes = {};
 
@@ -869,22 +719,64 @@ class AdminController extends ChangeNotifier {
     return _communityQrCodes[communityIndex] ?? [];
   }
 
-  void addQrCodes(int communityIndex, List<PlantQrCode> codes) {
+  /// Add QR codes, persisted to Appwrite.
+  Future<void> addQrCodes(int communityIndex, List<PlantQrCode> codes) async {
     _communityQrCodes.putIfAbsent(communityIndex, () => []);
     _communityQrCodes[communityIndex]!.addAll(codes);
+
+    if (!_useLocalFallback && communityIndex < _communities.length) {
+      final community = _communities[communityIndex];
+      if (community.id.isNotEmpty) {
+        try {
+          final qrDataList = codes.map((c) => c.toJson()).toList();
+          final docIds = await _adminDb.createAdminQrCodes(
+            communityId: community.id,
+            communityName: community.name,
+            qrDataList: qrDataList,
+          );
+
+          // Store the Appwrite doc IDs back on the local objects
+          for (int i = 0; i < codes.length && i < docIds.length; i++) {
+            codes[i].appwriteDocId = docIds[i];
+          }
+        } catch (e) {
+          debugPrint('AdminController: Failed to persist QR codes: $e');
+        }
+      }
+    }
+
     notifyListeners();
   }
 
-  void markQrCodesUploaded(int communityIndex) {
+  /// Mark QR codes as uploaded, persisted to Appwrite.
+  Future<void> markQrCodesUploaded(int communityIndex) async {
     final codes = _communityQrCodes[communityIndex];
-    if (codes != null) {
-      for (final code in codes) {
-        code.isUploaded = true;
+    if (codes == null) return;
+
+    // Get doc IDs for Appwrite update
+    final docIds = codes
+        .where((c) => c.appwriteDocId != null && !c.isUploaded)
+        .map((c) => c.appwriteDocId!)
+        .toList();
+
+    if (!_useLocalFallback && docIds.isNotEmpty) {
+      try {
+        await _adminDb.markQrCodesUploaded(docIds);
+      } catch (e) {
+        debugPrint('AdminController: Failed to mark QR codes uploaded: $e');
       }
-      notifyListeners();
     }
+
+    for (final code in codes) {
+      code.isUploaded = true;
+    }
+    notifyListeners();
   }
 
   int get totalQrCodes =>
       _communityQrCodes.values.fold(0, (sum, list) => sum + list.length);
+
+  // ── Fallback removed — no dummy data ────────────────────────────────────
+  // _loadFallbackData has been removed. When Appwrite is unreachable the admin
+  // panel simply shows empty state / error message.
 }

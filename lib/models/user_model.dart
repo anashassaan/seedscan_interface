@@ -6,6 +6,7 @@ class UserModel {
   final String name;
   final String username;
   final String email;
+  final String role; // 'user' or 'admin'
   final int walletBalance;
   final int currentStreak;
   final List<String> joinedDrives;
@@ -16,11 +17,14 @@ class UserModel {
     required this.name,
     this.username = '',
     required this.email,
+    this.role = 'user',
     this.walletBalance = 0,
     this.currentStreak = 0,
     this.joinedDrives = const [],
     required this.createdAt,
   });
+
+  bool get isAdmin => role == 'admin';
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
@@ -28,6 +32,7 @@ class UserModel {
       name: json['name'] ?? '',
       username: json['username'] ?? '',
       email: json['email'] ?? '',
+      role: json['role'] ?? 'user',
       walletBalance: json['wallet_balance'] ?? 0,
       currentStreak: json['current_streak'] ?? 0,
       joinedDrives: List<String>.from(json['joined_drives'] ?? []),
@@ -44,6 +49,7 @@ class UserModel {
       'name': name,
       'username': username,
       'email': email,
+      'role': role,
       'wallet_balance': walletBalance,
       'current_streak': currentStreak,
       'joined_drives': joinedDrives,
@@ -56,6 +62,7 @@ class UserModel {
     String? name,
     String? username,
     String? email,
+    String? role,
     int? walletBalance,
     int? currentStreak,
     List<String>? joinedDrives,
@@ -66,6 +73,7 @@ class UserModel {
       name: name ?? this.name,
       username: username ?? this.username,
       email: email ?? this.email,
+      role: role ?? this.role,
       walletBalance: walletBalance ?? this.walletBalance,
       currentStreak: currentStreak ?? this.currentStreak,
       joinedDrives: joinedDrives ?? this.joinedDrives,

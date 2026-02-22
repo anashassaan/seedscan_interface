@@ -6,7 +6,9 @@ import '../common/custom_button.dart';
 import '../common/custom_text_field.dart';
 
 class SignUpView extends StatefulWidget {
-  const SignUpView({super.key});
+  final String role;
+
+  const SignUpView({super.key, this.role = 'user'});
 
   @override
   State<SignUpView> createState() => _SignUpViewState();
@@ -38,6 +40,7 @@ class _SignUpViewState extends State<SignUpView> {
       username: _username.text.trim(),
       email: _email.text.trim(),
       password: _password.text,
+      role: widget.role,
     );
     setState(() => _loading = false);
     if (!ok && mounted) {
@@ -46,9 +49,8 @@ class _SignUpViewState extends State<SignUpView> {
         SnackBar(content: Text(errorMsg)),
       );
     } else if (mounted) {
-      Navigator.of(
-        context,
-      ).pop(); // will cause entrydecider to route to main navigation
+      // Pop all the way back to EntryDecider which will route based on role
+      Navigator.of(context).popUntil((route) => route.isFirst);
     }
   }
 

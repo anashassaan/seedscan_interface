@@ -179,7 +179,7 @@ class _MyGardenTab extends StatelessWidget {
   }
 }
 
-// Community Tab - Shows all communities
+// Community Tab - Shows communities the user has joined
 class _CommunityPlantsTab extends StatelessWidget {
   const _CommunityPlantsTab();
 
@@ -187,7 +187,30 @@ class _CommunityPlantsTab extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<CommunityController>(
       builder: (context, controller, _) {
+        if (controller.isLoading) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
         final communities = controller.getCommunities();
+
+        if (communities.isEmpty) {
+          return _buildEmptyState(
+            context,
+            icon: LucideIcons.users,
+            title: 'No Communities Yet',
+            subtitle:
+                'Scan a community plant QR code\nto join a community automatically',
+            actionLabel: 'Scan QR Code',
+            onAction: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const QRScannerScreen(),
+                ),
+              );
+            },
+          );
+        }
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
