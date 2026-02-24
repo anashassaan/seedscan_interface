@@ -1,6 +1,7 @@
 // lib/services/database_service.dart
 import 'dart:convert';
 import 'package:appwrite/appwrite.dart';
+import 'package:flutter/foundation.dart';
 import '../config/appwrite_constants.dart';
 import '../models/user_model.dart';
 import '../models/plant_model.dart';
@@ -331,8 +332,14 @@ class DatabaseService {
     required String userId,
     String role = 'member',
   }) async {
-    final doc = await _appwrite.createDocument(
+    // Use proper Appwrite SDK Permission + Role syntax (not raw strings)
+    // Document-level permissions let THIS user read/update/delete their own membership.
+    // IMPORTANT: The collection must also have 'create' permission for 'role:users'
+    // in the Appwrite console, otherwise this call will return 401.
+    final doc = await _appwrite.databases.createDocument(
+      databaseId: AppwriteConstants.databaseId,
       collectionId: AppwriteConstants.communityMembersCollection,
+      documentId: ID.unique(),
       data: {
         'community_id': communityId,
         'user_id': userId,
@@ -340,9 +347,9 @@ class DatabaseService {
         'joined_at': DateTime.now().toIso8601String(),
       },
       permissions: [
-        'read("users")',
-        'update("users")',
-        'delete("users")',
+        Permission.read(Role.users()), // all authenticated users can read
+        Permission.update(Role.user(userId)), // only this user can update
+        Permission.delete(Role.user(userId)), // only this user can delete
       ],
     );
     return CommunityMember.fromJson(doc.data);
@@ -392,6 +399,50 @@ class DatabaseService {
         data: {'member_count': community.memberCount + 1},
       );
     }
+  }
+
+  /// Increment the plant_count on a community document.
+  Future<void> incrementCommunityPlantCount(String communityId) async {
+    final community = await getCommunity(communityId);
+    if (community != null) {
+      await _appwrite.updateDocument(
+        collectionId: AppwriteConstants.communitiesCollection,
+        documentId: communityId,
+        data: {'plant_count': community.plantCount + 1},
+      );
+    }
+  }
+
+  /// Safely join a community. Returns `true` if the user was newly added,
+  /// or `false` if they were already a member.
+  /// Throws on unexpected backend errors so the caller can surface them.
+  Future<bool> safeJoinCommunity({
+    required String communityId,
+    required String userId,
+    String role = 'member',
+  }) async {
+    // Guard: no-op for empty IDs
+    if (communityId.isEmpty || userId.isEmpty) return false;
+
+    // Check membership first (avoid duplicate document errors)
+    final alreadyMember = await isUserInCommunity(communityId, userId);
+    if (alreadyMember) return false;
+
+    // Add member record
+    await addCommunityMember(
+      communityId: communityId,
+      userId: userId,
+      role: role,
+    );
+
+    // Update member count (best-effort — don't fail if this errors)
+    try {
+      await incrementCommunityMemberCount(communityId);
+    } catch (e) {
+      debugPrint('safeJoinCommunity: member_count update failed: $e');
+    }
+
+    return true; // newly added
   }
 
   // ---------------------------------------------------------------------------
@@ -937,6 +988,9 @@ class DatabaseService {
       bucketId: AppwriteConstants.communityMediaBucket,
       filePath: filePath,
       fileId: ID.unique(),
+      permissions: [
+        Permission.read(Role.any()), // Allow everyone to view community images
+      ],
     );
     return file.$id;
   }

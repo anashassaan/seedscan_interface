@@ -180,8 +180,29 @@ class _MyGardenTab extends StatelessWidget {
 }
 
 // Community Tab - Shows communities the user has joined
-class _CommunityPlantsTab extends StatelessWidget {
+class _CommunityPlantsTab extends StatefulWidget {
   const _CommunityPlantsTab();
+
+  @override
+  State<_CommunityPlantsTab> createState() => _CommunityPlantsTabState();
+}
+
+class _CommunityPlantsTabState extends State<_CommunityPlantsTab> {
+  @override
+  void initState() {
+    super.initState();
+    // Always reload from Appwrite when this tab is shown
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reload());
+  }
+
+  Future<void> _reload() async {
+    final auth = context.read<AuthController>();
+    final ctrl = context.read<CommunityController>();
+    final uid = auth.userId ?? '';
+    if (uid.isNotEmpty) {
+      await ctrl.loadUserCommunities(uid);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -194,31 +215,35 @@ class _CommunityPlantsTab extends StatelessWidget {
         final communities = controller.getCommunities();
 
         if (communities.isEmpty) {
-          return _buildEmptyState(
-            context,
-            icon: LucideIcons.users,
-            title: 'No Communities Yet',
-            subtitle:
-                'Scan a community plant QR code\nto join a community automatically',
-            actionLabel: 'Scan QR Code',
-            onAction: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const QRScannerScreen(),
+          return RefreshIndicator(
+            onRefresh: _reload,
+            child: ListView(
+              children: [
+                const SizedBox(height: 80),
+                _buildEmptyState(
+                  context,
+                  icon: LucideIcons.users,
+                  title: 'No Communities Yet',
+                  subtitle:
+                      'Scan a community plant QR code\nto join a community automatically',
+                  actionLabel: 'Refresh',
+                  onAction: _reload,
                 ),
-              );
-            },
+              ],
+            ),
           );
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: communities.length,
-          itemBuilder: (context, index) {
-            final community = communities[index];
-            return _CommunityCard(community: community);
-          },
+        return RefreshIndicator(
+          onRefresh: _reload,
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: communities.length,
+            itemBuilder: (context, index) {
+              final community = communities[index];
+              return _CommunityCard(community: community);
+            },
+          ),
         );
       },
     );

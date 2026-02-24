@@ -84,11 +84,17 @@ class _EntryDeciderState extends State<EntryDecider> {
     final auth = Provider.of<AuthController>(context, listen: false);
     await auth.initialize();
 
-    // Load user's communities from Appwrite once logged in
+    // Load user's communities AND plants from Appwrite once logged in
     if (auth.isLoggedIn && !auth.isAdmin) {
       final communityCtrl =
           Provider.of<CommunityController>(context, listen: false);
-      communityCtrl.loadUserCommunities(auth.userId ?? '');
+      final scanCtrl = Provider.of<ScanController>(context, listen: false);
+      final uid = auth.userId ?? '';
+      // Fire both loads concurrently
+      await Future.wait([
+        communityCtrl.loadUserCommunities(uid),
+        scanCtrl.loadMyPlants(uid),
+      ]);
     }
 
     if (mounted) {

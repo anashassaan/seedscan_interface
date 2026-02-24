@@ -191,7 +191,7 @@ class HomeView extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _plantsPreview(),
+                  _plantsPreview(scanController),
                 ],
               ),
             ),
@@ -362,36 +362,79 @@ class HomeView extends StatelessWidget {
     );
   }
 
-  // Plants Preview
-  Widget _plantsPreview() {
+  // Plants Preview — loaded from Appwrite via ScanController
+  Widget _plantsPreview(ScanController scanController) {
+    if (scanController.isLoadingPlants) {
+      return SizedBox(
+        height: 160,
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          itemCount: 3,
+          itemBuilder: (_, __) => Container(
+            width: 140,
+            margin: const EdgeInsets.only(right: 16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final plants = scanController.getMyPlants();
+
+    if (plants.isEmpty) {
+      return Container(
+        height: 160,
+        decoration: BoxDecoration(
+          color: Colors.green.shade50,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.green.shade100),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.eco_outlined, color: Colors.green.shade300, size: 40),
+              const SizedBox(height: 8),
+              Text(
+                'No plants yet',
+                style: TextStyle(
+                  color: Colors.green.shade700,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                'Scan a QR code to add your first plant',
+                style: TextStyle(
+                  color: Colors.green.shade400,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return SizedBox(
       height: 160,
-      child: ListView(
+      child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        children: [
-          // TODO: DUMMY DATA - Replace these placeholder images with user-uploaded photos
-          _plantBox(
-            'Neem Tree',
-            'Healthy',
-            'https://images.unsplash.com/photo-1597262975002-c5c3b14bbd62?auto=format&fit=crop&w=400', // PLACEHOLDER
-          ),
-          _plantBox(
-            'Mango',
-            'Needs Water',
-            'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=400',
-          ),
-          _plantBox(
-            'Rose',
-            'Healthy',
-            'https://images.unsplash.com/photo-1501004318641-b39e6451bec6?auto=format&fit=crop&w=400',
-          ),
-        ],
+        itemCount: plants.length,
+        itemBuilder: (context, index) {
+          final plant = plants[index];
+          return _plantBox(plant.name, plant.status, plant.image,
+              plant.statusColor, plant.lastScan);
+        },
       ),
     );
   }
 
-  // Plant card
-  Widget _plantBox(String name, String status, String img) {
+  // Plant card — real data
+  Widget _plantBox(
+      String name, String status, String img, Color statusColor, String date) {
     return Container(
       width: 140,
       margin: const EdgeInsets.only(right: 16),
@@ -403,16 +446,50 @@ class HomeView extends StatelessWidget {
         child: Column(
           children: [
             Expanded(
-              child:
-                  Image.network(img, width: double.infinity, fit: BoxFit.cover),
+              child: img.isNotEmpty && img.startsWith('http')
+                  ? Image.network(img,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                            color: Colors.green.shade50,
+                            child: Icon(Icons.eco,
+                                size: 40, color: Colors.green.shade300),
+                          ))
+                  : Container(
+                      color: Colors.green.shade50,
+                      child: Icon(Icons.eco,
+                          size: 40, color: Colors.green.shade300),
+                    ),
             ),
             Padding(
               padding: const EdgeInsets.all(8),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(name,
-                      style: const TextStyle(fontWeight: FontWeight.w600)),
-                  Text(status, style: const TextStyle(fontSize: 12)),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 12)),
+                  Row(
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: statusColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(status,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 10, color: statusColor)),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),

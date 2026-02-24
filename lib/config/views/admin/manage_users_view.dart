@@ -131,30 +131,82 @@ class ManageUsersView extends StatelessWidget {
                   margin: const EdgeInsets.only(bottom: 12),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16)),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      child: Text(user.name[0].toUpperCase()),
-                    ),
-                    title: Text(user.name,
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text(
-                        "${user.email} • ${user.role}\nIn: ${admin.communities[cIdx].name}"),
-                    isThreeLine: true,
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (value) async {
-                        if (value == 'edit') {
-                          _showEditRoleDialog(context, cIdx, uIdx, user.role);
-                        } else if (value == 'delete') {
-                          await admin.removeUserFromCommunity(cIdx, uIdx);
-                        }
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                            value: 'edit', child: Text('Edit Role')),
-                        const PopupMenuItem(
-                          value: 'delete',
-                          child: Text('Remove User',
-                              style: TextStyle(color: Colors.red)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          backgroundColor: Colors
+                              .primaries[index % Colors.primaries.length]
+                              .withOpacity(0.8),
+                          child: Text(
+                            user.name.isNotEmpty
+                                ? user.name[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(user.name,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15)),
+                              const SizedBox(height: 2),
+                              Text(user.email,
+                                  style: TextStyle(
+                                      fontSize: 12, color: Colors.grey[600])),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  _infoChip(
+                                    admin.communities[cIdx].name,
+                                    Icons.group,
+                                    Colors.blue,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  _infoChip(
+                                    user.role,
+                                    Icons.badge,
+                                    user.role == 'Admin'
+                                        ? Colors.red
+                                        : Colors.green,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  _infoChip(
+                                    '🌿 ${_plantCount(user)} plants',
+                                    null,
+                                    Colors.teal,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        PopupMenuButton<String>(
+                          onSelected: (value) async {
+                            if (value == 'edit') {
+                              _showEditRoleDialog(
+                                  context, cIdx, uIdx, user.role);
+                            } else if (value == 'delete') {
+                              await admin.removeUserFromCommunity(cIdx, uIdx);
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                                value: 'edit', child: Text('Edit Role')),
+                            const PopupMenuItem(
+                              value: 'delete',
+                              child: Text('Remove User',
+                                  style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -167,5 +219,41 @@ class ManageUsersView extends StatelessWidget {
         child: const Icon(Icons.person_add),
       ),
     );
+  }
+
+  /// Small colored chip for displaying community/role/plant info.
+  static Widget _infoChip(String label, IconData? icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 10, color: color),
+            const SizedBox(width: 3),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Count "Planting" activity logs for a user.
+  static int _plantCount(AppUser user) {
+    return user.stats
+        .where((s) => s.action == 'Planting')
+        .fold(0, (sum, s) => sum + (s.count ?? 0));
   }
 }

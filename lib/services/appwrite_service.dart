@@ -144,6 +144,9 @@ class AppwriteService {
         'current_streak': 0,
         'joined_drives': [],
         'created_at': DateTime.now().toIso8601String(),
+        // Appwrite requires these fields for all users due to collection schema
+        'organization': organization ?? 'N/A',
+        'admin_reason': adminReason ?? 'N/A',
       };
 
       // Add admin-specific fields if registering as admin

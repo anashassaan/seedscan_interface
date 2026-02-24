@@ -4,12 +4,34 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../controllers/community_controller.dart';
+import '../../controllers/auth_controller.dart';
 import '../../../models/community_model.dart';
 import 'community_plants_view.dart';
-import 'package:intl/intl.dart';
 
-class CommunityView extends StatelessWidget {
+class CommunityView extends StatefulWidget {
   const CommunityView({super.key});
+
+  @override
+  State<CommunityView> createState() => _CommunityViewState();
+}
+
+class _CommunityViewState extends State<CommunityView> {
+  // Pull-to-refresh: reload communities from Appwrite
+  Future<void> _refresh() async {
+    final auth = context.read<AuthController>();
+    final ctrl = context.read<CommunityController>();
+    final uid = auth.userId ?? '';
+    if (uid.isNotEmpty) {
+      await ctrl.loadUserCommunities(uid);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Always reload from DB when this tab is opened
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +47,14 @@ class CommunityView extends StatelessWidget {
               pinned: true,
               backgroundColor: cs.primary,
               foregroundColor: cs.onPrimary,
+              actions: [
+                // Manual refresh button
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  tooltip: 'Refresh',
+                  onPressed: _refresh,
+                ),
+              ],
               flexibleSpace: FlexibleSpaceBar(
                 titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
                 title: Text(
@@ -54,7 +84,7 @@ class CommunityView extends StatelessWidget {
                         child: Icon(
                           LucideIcons.users,
                           size: 150,
-                          color: cs.onPrimary.withOpacity(0.1),
+                          color: cs.onPrimary.withValues(alpha: 0.1),
                         ),
                       ),
                     ],
@@ -66,15 +96,66 @@ class CommunityView extends StatelessWidget {
         },
         body: Consumer<CommunityController>(
           builder: (context, controller, _) {
+            if (controller.isLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
             final communities = controller.getCommunities();
 
-            return ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: communities.length,
-              itemBuilder: (context, index) {
-                final community = communities[index];
-                return _CommunityCard(community: community);
-              },
+            if (communities.isEmpty) {
+              return RefreshIndicator(
+                onRefresh: _refresh,
+                child: ListView(
+                  children: [
+                    SizedBox(height: MediaQuery.of(context).size.height * 0.2),
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(LucideIcons.users,
+                              size: 64,
+                              color: cs.onSurface.withValues(alpha: 0.2)),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No communities yet',
+                            style: GoogleFonts.poppins(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: cs.onSurface.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Scan a community plant QR code to join',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: cs.onSurface.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          OutlinedButton.icon(
+                            onPressed: _refresh,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Refresh'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: communities.length,
+                itemBuilder: (context, index) {
+                  final community = communities[index];
+                  return _CommunityCard(community: community);
+                },
+              ),
             );
           },
         ),
@@ -155,7 +236,7 @@ class _CommunityCard extends StatelessWidget {
                         end: Alignment.bottomCenter,
                         colors: [
                           Colors.transparent,
-                          Colors.black.withOpacity(0.5),
+                          Colors.black.withValues(alpha: 0.5),
                         ],
                       ),
                     ),
@@ -169,7 +250,7 @@ class _CommunityCard extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: cs.primary.withOpacity(0.9),
+                      color: cs.primary.withValues(alpha: 0.9),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -216,7 +297,7 @@ class _CommunityCard extends StatelessWidget {
                     community.description ?? 'No description available',
                     style: GoogleFonts.inter(
                       fontSize: 14,
-                      color: cs.onSurface.withOpacity(0.7),
+                      color: cs.onSurface.withValues(alpha: 0.7),
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -237,7 +318,7 @@ class _CommunityCard extends StatelessWidget {
                         style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: cs.onSurface.withOpacity(0.7),
+                          color: cs.onSurface.withValues(alpha: 0.7),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -252,15 +333,12 @@ class _CommunityCard extends StatelessWidget {
                         style: GoogleFonts.inter(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: cs.onSurface.withOpacity(0.7),
+                          color: cs.onSurface.withValues(alpha: 0.7),
                         ),
                       ),
                       const Spacer(),
-                      Icon(
-                        LucideIcons.chevronRight,
-                        size: 20,
-                        color: cs.onSurface.withOpacity(0.5),
-                      ),
+                      Icon(LucideIcons.chevronRight,
+                          size: 20, color: cs.onSurface.withValues(alpha: 0.5)),
                     ],
                   ),
                 ],

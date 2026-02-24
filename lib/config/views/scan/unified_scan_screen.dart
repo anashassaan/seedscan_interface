@@ -1151,6 +1151,7 @@ class _UnifiedCommunityQRDialogState extends State<_UnifiedCommunityQRDialog> {
   bool _alreadyMember = false;
   bool _isPlanting = false;
   bool _planted = false;
+  bool _joinFailed = false; // true when Appwrite rejected the membership write
   String? _joinMessage;
 
   @override
@@ -1192,6 +1193,11 @@ class _UnifiedCommunityQRDialogState extends State<_UnifiedCommunityQRDialog> {
 
   Future<void> _plantAndJoin() async {
     setState(() => _isPlanting = true);
+
+    final auth = Provider.of<AuthController>(context, listen: false);
+    final userId = auth.userId ?? '';
+    final communityCtrl =
+        Provider.of<CommunityController>(context, listen: false);
 
     try {
       // 1. Take a photo of the plant
@@ -1238,16 +1244,16 @@ class _UnifiedCommunityQRDialogState extends State<_UnifiedCommunityQRDialog> {
 
       // 3. Upload plant image
       String? imageUrl;
+      String? uploadedFileId;
       try {
-        final fileId = await _db.uploadPlantImage(photo.path);
-        imageUrl = _db.getPlantImageUrl(fileId);
+        uploadedFileId = await _db.uploadPlantImage(photo.path);
+        imageUrl = _db.getPlantImageUrl(uploadedFileId);
       } catch (e) {
         debugPrint('Image upload failed: $e');
       }
 
-      // 4. Create plant record in Appwrite
-      final auth = Provider.of<AuthController>(context, listen: false);
-      final userId = auth.userId ?? '';
+      // 4. Create plant record in Appwrite using a unique ID (not widget.qrId)
+      //    to avoid document collisions with admin QR records.
       try {
         await _db.createPlant(
           species: widget.plantName,
@@ -1256,59 +1262,79 @@ class _UnifiedCommunityQRDialogState extends State<_UnifiedCommunityQRDialog> {
           lng: lng,
           imageUrl: imageUrl ?? photo.path,
           nickname: widget.plantType,
-          plantId: widget.qrId,
+          driveId: widget.communityId, // link plant to community
+          // No plantId → Appwrite auto-generates a unique ID
         );
+
+        // Keep community stats in sync
+        try {
+          await _db.incrementCommunityPlantCount(widget.communityId);
+        } catch (e) {
+          debugPrint('Increment community plant count failed: $e');
+        }
       } catch (e) {
         debugPrint('Plant creation failed: $e');
       }
 
       // 5. Create activity log
       try {
-        String? proofId;
-        try {
-          proofId = await _db.uploadPlantImage(photo.path);
-        } catch (_) {}
         await _db.createActivityLog(
           userId: userId,
           plantId: widget.qrId,
           actionType: 'register',
           coinsAwarded: 10,
           verificationStatus: 'verified',
-          proofImageId: proofId ?? '',
+          proofImageId: uploadedFileId ?? '',
         );
       } catch (e) {
         debugPrint('Activity log failed: $e');
       }
 
-      // 6. Auto-join community if not already a member
+      // 6. Auto-join community — safeJoinCommunity checks membership first,
+      //    adds the user, and updates member_count atomically.
       String joinMsg = '';
-      if (!_alreadyMember && userId.isNotEmpty) {
+      bool newlyJoined = false;
+      bool joinFailed = false;
+      if (userId.isNotEmpty) {
         try {
-          await _db.addCommunityMember(
+          newlyJoined = await _db.safeJoinCommunity(
             communityId: widget.communityId,
             userId: userId,
             role: 'member',
           );
-          await _db.incrementCommunityMemberCount(widget.communityId);
-          joinMsg = 'You have been added to $_communityName!';
-          _alreadyMember = true;
+          if (newlyJoined) {
+            joinMsg = '✅ You have been added to $_communityName!';
+            _alreadyMember = true;
+          } else {
+            joinMsg = '✅ Plant registered in $_communityName.';
+          }
         } catch (e) {
-          debugPrint('Auto-join failed: $e');
-          joinMsg = 'Planted successfully, but could not join community.';
+          joinFailed = true;
+          // Surface the REAL Appwrite error so it shows in-app
+          final errStr = e.toString();
+          debugPrint('Community join failed (REAL ERROR): $errStr');
+          joinMsg =
+              '❌ Join failed — Appwrite error:\n$errStr\n\nFix: In Appwrite Console → community_members collection → Permissions → add CREATE for role:users';
         }
-      } else if (_alreadyMember) {
-        joinMsg = 'Plant registered in $_communityName.';
       }
 
-      // 7. Add community to the Community tab
-      final communityCtrl =
-          Provider.of<CommunityController>(context, listen: false);
+      // 7. Update the Community tab in-memory AND reload from DB so the
+      //    community persists in the user's list even after an app restart.
       try {
         final freshCommunity = await _db.getCommunity(widget.communityId);
         if (freshCommunity != null) {
           communityCtrl.addCommunityLocally(freshCommunity);
         }
       } catch (_) {}
+
+      // Reload memberships from DB to keep the user panel in sync
+      if (userId.isNotEmpty) {
+        try {
+          await communityCtrl.loadUserCommunities(userId);
+        } catch (e) {
+          debugPrint('loadUserCommunities failed after join: $e');
+        }
+      }
 
       communityCtrl.addPlantToCommunity(CommunityPlant(
         id: widget.qrId,
@@ -1332,6 +1358,7 @@ class _UnifiedCommunityQRDialogState extends State<_UnifiedCommunityQRDialog> {
         setState(() {
           _isPlanting = false;
           _planted = true;
+          _joinFailed = joinFailed;
           _joinMessage = joinMsg;
         });
       }
@@ -1469,29 +1496,45 @@ class _UnifiedCommunityQRDialogState extends State<_UnifiedCommunityQRDialog> {
                       ),
                     ),
 
-                  // Success message
+                  // Result message — green on success, red/amber on join failure
                   if (_planted && _joinMessage != null)
                     Container(
                       width: double.infinity,
                       margin: const EdgeInsets.only(top: 4),
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.green.shade50,
+                        color: _joinFailed
+                            ? Colors.red.shade50
+                            : Colors.green.shade50,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.green.shade200),
+                        border: Border.all(
+                          color: _joinFailed
+                              ? Colors.red.shade200
+                              : Colors.green.shade200,
+                        ),
                       ),
                       child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(LucideIcons.checkCircle,
-                              size: 18, color: Colors.green.shade700),
+                          Icon(
+                            _joinFailed
+                                ? LucideIcons.alertCircle
+                                : LucideIcons.checkCircle,
+                            size: 18,
+                            color: _joinFailed
+                                ? Colors.red.shade700
+                                : Colors.green.shade700,
+                          ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               _joinMessage!,
                               style: GoogleFonts.poppins(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.green.shade800,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: _joinFailed
+                                    ? Colors.red.shade900
+                                    : Colors.green.shade800,
                               ),
                             ),
                           ),

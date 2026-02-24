@@ -20,8 +20,65 @@ class ScanController extends ChangeNotifier {
   // Mutable plants list
   final List<PlantModel> _myPlants = [];
 
+  // Loading state for DB fetch
+  bool _isLoadingPlants = false;
+  bool get isLoadingPlants => _isLoadingPlants;
+
   void _initializePlants() {
     // Plants list starts empty — populated from DB or QR scan
+  }
+
+  /// Load all plants for [userId] from Appwrite (my_garden_qr_codes collection).
+  Future<void> loadMyPlants(String userId) async {
+    if (userId.isEmpty) return;
+    _isLoadingPlants = true;
+    notifyListeners();
+
+    try {
+      final db = DatabaseService();
+      final qrList = await db.listMyGardenQRCodes(userId);
+
+      _myPlants.clear();
+      for (final qr in qrList) {
+        _myPlants.add(PlantModel(
+          id: qr.id,
+          name: qr.plantName.isNotEmpty ? qr.plantName : 'Plant',
+          scientificName: qr.localName.isNotEmpty ? qr.localName : qr.category,
+          image: qr.imageUrl ?? '',
+          status: _healthStatusLabel(qr.notes),
+          statusColor: _healthStatusColor(qr.notes),
+          lastScan: _formatDate(qr.plantedAt),
+          location: qr.gardenId,
+          latitude: qr.locationLat != 0.0 ? qr.locationLat : null,
+          longitude: qr.locationLong != 0.0 ? qr.locationLong : null,
+        ));
+      }
+    } catch (e) {
+      debugPrint('ScanController.loadMyPlants failed: $e');
+    }
+
+    _isLoadingPlants = false;
+    notifyListeners();
+  }
+
+  static String _healthStatusLabel(String notes) {
+    final lower = notes.toLowerCase();
+    if (lower.contains('disease') || lower.contains('sick'))
+      return 'Needs Attention';
+    if (lower.contains('water')) return 'Needs Water';
+    return 'Healthy';
+  }
+
+  static Color _healthStatusColor(String notes) {
+    final lower = notes.toLowerCase();
+    if (lower.contains('disease') || lower.contains('sick')) return Colors.red;
+    if (lower.contains('water')) return Colors.orange;
+    return Colors.green;
+  }
+
+  static String _formatDate(DateTime? date) {
+    if (date == null) return 'Unknown';
+    return '${date.day}/${date.month}/${date.year}';
   }
 
   // Camera controller from mobile_scanner (works on mobile & desktop)

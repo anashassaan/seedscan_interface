@@ -135,6 +135,10 @@ class _ProfileViewState extends State<ProfileView> {
     final totalPlantsCount =
         myPlants.length + communityController.getTotalCommunityPlantsCount();
     final isDark = themeController.isDarkMode;
+    final uid = auth.userId ?? '';
+    final createdCount = communityController.createdCount(uid);
+    final joinedCount = communityController.joinedCount(uid);
+    final totalCommunities = createdCount + joinedCount;
 
     ImageProvider? profileImageProvider;
     if (auth.profileImage != null) {
@@ -334,9 +338,9 @@ class _ProfileViewState extends State<ProfileView> {
                       Expanded(
                         child: _buildStatCard(
                           context,
-                          icon: LucideIcons.scan,
-                          label: 'Scans',
-                          value: '47',
+                          icon: LucideIcons.users,
+                          label: 'Communities',
+                          value: '$totalCommunities',
                           color: Colors.blue,
                           isDark: isDark,
                         ),
@@ -358,6 +362,66 @@ class _ProfileViewState extends State<ProfileView> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Communities Breakdown Card
+                  Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 14),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(LucideIcons.treeDeciduous,
+                                color: Colors.blue, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'My Communities',
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Created: $createdCount  •  Joined: $joinedCount',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? Colors.grey[400]
+                                        : Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          communityController.isLoading
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(LucideIcons.chevronRight,
+                                  color: Colors.grey),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 20),
 

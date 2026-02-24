@@ -43,6 +43,22 @@ class CommunityController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Communities created by [userId].
+  List<Community> getCreatedCommunities(String userId) {
+    return _communities.where((c) => c.creatorId == userId).toList();
+  }
+
+  /// Communities the user joined but did NOT create.
+  List<Community> getJoinedCommunities(String userId) {
+    return _communities.where((c) => c.creatorId != userId).toList();
+  }
+
+  /// Number of communities created by [userId].
+  int createdCount(String userId) => getCreatedCommunities(userId).length;
+
+  /// Number of communities joined (but not created) by [userId].
+  int joinedCount(String userId) => getJoinedCommunities(userId).length;
+
   /// Add a community to the in-memory list (used after QR auto-join).
   void addCommunityLocally(Community community) {
     // Avoid duplicates

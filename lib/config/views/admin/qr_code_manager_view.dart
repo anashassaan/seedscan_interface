@@ -89,11 +89,10 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
 
     setState(() => _isGenerating = true);
 
-    // Build community ID from name (slug)
-    final communityId = community.name
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]'), '_')
-        .replaceAll(RegExp(r'_+'), '_');
+    // Use the real Appwrite $id — NOT a slugified name.
+    // The QR data embeds this as the community identifier so the scanner
+    // can resolve the correct community document from Appwrite.
+    final communityId = community.id; // e.g. '699bef18c5fa79c38fa0'
 
     final codes = List.generate(quantity, (_) {
       final uniqueId = uuid.v4().split('-').first.toUpperCase();
@@ -523,10 +522,8 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
 
     final admin = Provider.of<AdminController>(context, listen: false);
     final community = admin.communities[widget.communityIndex];
-    final communityId = community.name
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]'), '_')
-        .replaceAll(RegExp(r'_+'), '_');
+    // Use the real Appwrite $id — NOT a slugified name.
+    final communityId = community.id;
 
     final codes = <PlantQrCode>[];
 
