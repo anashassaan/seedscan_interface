@@ -11,6 +11,7 @@ class ActivityLog {
   final String verificationStatus; // verified, rejected
   final String proofImageId;
   final String? rejectionReason;
+  final DateTime createdAt;
 
   ActivityLog({
     required this.id,
@@ -21,7 +22,8 @@ class ActivityLog {
     required this.verificationStatus,
     required this.proofImageId,
     this.rejectionReason,
-  });
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
 
   factory ActivityLog.fromJson(Map<String, dynamic> json) {
     return ActivityLog(
@@ -33,6 +35,9 @@ class ActivityLog {
       verificationStatus: json['verification_status'] ?? '',
       proofImageId: json['proof_image_id'] ?? '',
       rejectionReason: json['rejection_reason'],
+      createdAt: json['created_at'] != null || json['\$createdAt'] != null
+          ? DateTime.tryParse(json['created_at'] ?? json['\$createdAt'] ?? '')
+          : null,
     );
   }
 
@@ -45,6 +50,7 @@ class ActivityLog {
       'verification_status': verificationStatus,
       'proof_image_id': proofImageId,
       'rejection_reason': rejectionReason,
+      'created_at': createdAt.toIso8601String(),
     };
   }
 }

@@ -1,6 +1,10 @@
 ﻿import 'package:flutter/material.dart';
 import '../../services/admin_database_service.dart';
 import '../../models/user_model.dart';
+import 'package:appwrite/appwrite.dart';
+import '../../services/database_service.dart';
+import '../../models/plant_model.dart';
+import '../../models/transaction_model.dart';
 import '../../models/community_model.dart';
 
 // 1. Model for individual planting records
@@ -440,6 +444,36 @@ class AdminController extends ChangeNotifier {
         return 'User';
       default:
         return 'User';
+    }
+  }
+
+  // ── Fetch User Specific Data ────────────────────────────────────────────────
+
+  /// Get all plants belonging to a specific user.
+  Future<List<PlantModel>> getUserPlants(String userId) async {
+    try {
+      final dbService = DatabaseService();
+      return await dbService.listMyPlants(userId);
+    } catch (e) {
+      debugPrint(
+          'AdminController: Failed to fetch plants for user $userId: $e');
+      return [];
+    }
+  }
+
+  /// Get activity history (PlantStats/Logs) for a specific plant.
+  Future<List<ActivityLog>> getPlantHistoryLogs(String plantId) async {
+    try {
+      final dbService = DatabaseService();
+      final logs = await dbService.listActivityLogs(queries: [
+        Query.equal('plant_id', plantId),
+        Query.orderAsc('created_at'),
+      ]);
+      return logs;
+    } catch (e) {
+      debugPrint(
+          'AdminController: Failed to fetch history for plant $plantId: $e');
+      return [];
     }
   }
 

@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../controllers/admin_controller.dart';
+import '../../../models/community_model.dart';
+import '../../../models/user_model.dart'; // or wherever AppUser is
 import 'qr_code_manager_view.dart';
+import 'member_plants_view.dart';
 
 class CommunityDetailsView extends StatefulWidget {
   final int communityIndex;
@@ -520,30 +523,32 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
           Expanded(
             child: community.members.isEmpty
                 ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(LucideIcons.userX,
-                            size: 52,
-                            color: cs.onSurface.withValues(alpha: 0.12)),
-                        const SizedBox(height: 12),
-                        Text("No members yet",
-                            style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: cs.onSurface.withValues(alpha: 0.4))),
-                        const SizedBox(height: 4),
-                        Text("Tap + to add or refresh to sync",
-                            style: TextStyle(
-                                fontSize: 13,
-                                color: cs.onSurface.withValues(alpha: 0.3))),
-                        const SizedBox(height: 16),
-                        OutlinedButton.icon(
-                          onPressed: _refresh,
-                          icon: const Icon(Icons.refresh, size: 18),
-                          label: const Text('Refresh'),
-                        ),
-                      ],
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(LucideIcons.userX,
+                              size: 52,
+                              color: cs.onSurface.withValues(alpha: 0.12)),
+                          const SizedBox(height: 12),
+                          Text("No members yet",
+                              style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: cs.onSurface.withValues(alpha: 0.4))),
+                          const SizedBox(height: 4),
+                          Text("Tap + to add or refresh to sync",
+                              style: TextStyle(
+                                  fontSize: 13,
+                                  color: cs.onSurface.withValues(alpha: 0.3))),
+                          const SizedBox(height: 16),
+                          OutlinedButton.icon(
+                            onPressed: _refresh,
+                            icon: const Icon(Icons.refresh, size: 18),
+                            label: const Text('Refresh'),
+                          ),
+                        ],
+                      ),
                     ),
                   )
                 : RefreshIndicator(
@@ -641,24 +646,59 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
                                             MainAxisAlignment.spaceBetween,
                                         children: [
                                           Flexible(
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(LucideIcons.leaf,
-                                                    size: 16,
-                                                    color: cs.primary),
-                                                const SizedBox(width: 6),
-                                                Flexible(
-                                                  child: Text(
-                                                      "$plantCount plants",
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      style: TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.w500,
-                                                          color: cs.onSurface)),
+                                            child: Material(
+                                              color: Colors.transparent,
+                                              child: InkWell(
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                onTap: () {
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (_) =>
+                                                          MemberPlantsView(
+                                                        userId: user.id,
+                                                        userName: user.name,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                                child: Padding(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                      horizontal: 4,
+                                                      vertical: 2),
+                                                  child: Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Icon(LucideIcons.leaf,
+                                                          size: 16,
+                                                          color: cs.primary),
+                                                      const SizedBox(width: 6),
+                                                      Flexible(
+                                                        child: Text(
+                                                            "$plantCount plants",
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                            style: TextStyle(
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w500,
+                                                                color: cs
+                                                                    .onSurface)),
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Icon(
+                                                          LucideIcons
+                                                              .externalLink,
+                                                          size: 12,
+                                                          color: cs.primary),
+                                                    ],
+                                                  ),
                                                 ),
-                                              ],
+                                              ),
                                             ),
                                           ),
                                           const SizedBox(width: 8),
@@ -720,22 +760,52 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
                                         ),
                                       ],
                                       const SizedBox(height: 10),
-                                      Align(
-                                        alignment: Alignment.centerRight,
-                                        child: TextButton.icon(
-                                          onPressed: () => _confirmRemoveMember(
-                                              context,
-                                              admin,
-                                              userIndex,
-                                              user.name),
-                                          icon: Icon(LucideIcons.userMinus,
-                                              size: 16, color: cs.error),
-                                          label: Text('Remove',
-                                              style: TextStyle(
-                                                  color: cs.error,
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w500)),
-                                        ),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.end,
+                                        children: [
+                                          TextButton.icon(
+                                            onPressed: () =>
+                                                _confirmRemoveMember(
+                                                    context,
+                                                    admin,
+                                                    userIndex,
+                                                    user.name),
+                                            icon: Icon(LucideIcons.userMinus,
+                                                size: 16, color: cs.error),
+                                            label: Text('Remove',
+                                                style: TextStyle(
+                                                    color: cs.error,
+                                                    fontSize: 13,
+                                                    fontWeight:
+                                                        FontWeight.w500)),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          ElevatedButton.icon(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor:
+                                                  cs.primaryContainer,
+                                              foregroundColor:
+                                                  cs.onPrimaryContainer,
+                                              elevation: 0,
+                                            ),
+                                            onPressed: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (_) =>
+                                                      MemberPlantsView(
+                                                    userId: user.id,
+                                                    userName: user.name,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            icon: const Icon(LucideIcons.leaf,
+                                                size: 16),
+                                            label: const Text('View Plants'),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
