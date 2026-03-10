@@ -150,6 +150,7 @@ class _CoinAnalyticsViewState extends State<CoinAnalyticsView>
           Expanded(
             child: TabBarView(
               controller: _tabCtrl,
+              physics: const ClampingScrollPhysics(),
               children: [
                 _UsersTab(admin: admin, period: _selectedPeriod),
                 _CoinsTab(admin: admin, period: _selectedPeriod),
@@ -302,6 +303,7 @@ class _OverviewTab extends StatelessWidget {
         admin.totalUsers > 0 ? (totalCoins / admin.totalUsers).round() : 0;
 
     return ListView(
+      physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
       children: [
         // ── Scan Activity Chart ──
@@ -642,6 +644,7 @@ class _UsersTab extends StatelessWidget {
     final totalCoins = users.fold<int>(0, (s, u) => s + u.totalCoins);
 
     return ListView(
+      physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
       children: [
         // ── User Metrics ──
@@ -1131,6 +1134,7 @@ class _CoinsTab extends StatelessWidget {
     final topEarners = sortedUsers.take(5).toList();
 
     return ListView(
+      physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
       children: [
         // ── Coin Overview ──
@@ -1420,6 +1424,7 @@ class _EnvironmentTab extends StatelessWidget {
     final co2Offset = totalPlantings * 22;
 
     return ListView(
+      physics: const ClampingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
       children: [
         // ── Environmental Impact ──

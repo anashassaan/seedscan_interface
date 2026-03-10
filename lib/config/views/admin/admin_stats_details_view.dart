@@ -1380,29 +1380,8 @@ class _CustomNotificationSenderPageState
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
 
-  static const List<String> plantTypes = [
-    'Apple Tree',
-    'Oak',
-    'Pine',
-    'Cherry',
-    'Maple',
-    'Willow',
-    'Mango',
-    'Coconut',
-    'Banana',
-    'Lemon',
-  ];
-
-  static const List<String> diseaseTypes = [
-    'Alternaria Leaf Spot',
-    'Apple Scab',
-    'Black Rot',
-    'Brown Spot',
-    'Cedar Apple Rust',
-    'Grey Spot',
-    'Mosaic',
-    'Powdery Mildew',
-  ];
+  // plantTypes and diseaseTypes are computed dynamically from real community data.
+  // See admin.existingPlantSpecies and admin.existingDiseaseTypes.
 
   @override
   void dispose() {
@@ -1426,32 +1405,26 @@ class _CustomNotificationSenderPageState
         }
         break;
       case 'plantType':
+        if (_selectedPlantType == null) break;
+        final speciesOwners = admin.getUserIdsForSpecies(_selectedPlantType!);
         for (var community in admin.communities) {
           if (!_allCommunities && community.name != _selectedCommunity)
             continue;
           for (var member in community.members) {
-            for (var stat in member.stats) {
-              if (stat.type == _selectedPlantType) {
-                count++;
-                break;
-              }
+            if (member.id.isNotEmpty && speciesOwners.contains(member.id)) {
+              count++;
             }
           }
+        }
+        // If no community filter applied yet, fall back to all owners
+        if (!_allCommunities && _selectedCommunity == null) {
+          count = speciesOwners.length;
         }
         break;
       case 'disease':
-        // Count from real community members with disease-related stats
-        for (var community in admin.communities) {
-          for (var member in community.members) {
-            for (var stat in member.stats) {
-              if (stat.action == 'Health Scan' ||
-                  stat.action == 'Disease Detection') {
-                count++;
-                break;
-              }
-            }
-          }
-        }
+        if (_selectedDisease == null) break;
+        final diseaseOwners = admin.getUserIdsForDisease(_selectedDisease!);
+        count = diseaseOwners.length;
         break;
     }
     return count;
@@ -1601,19 +1574,28 @@ class _CustomNotificationSenderPageState
                   border: Border.all(color: cs.outline.withOpacity(0.2)),
                 ),
                 child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    isExpanded: true,
-                    hint: const Text('Select Plant Type'),
-                    value: _selectedPlantType,
-                    items: plantTypes
-                        .map((type) => DropdownMenuItem(
-                              value: type,
-                              child: Text(type),
-                            ))
-                        .toList(),
-                    onChanged: (val) =>
-                        setState(() => _selectedPlantType = val),
-                  ),
+                  child: Builder(builder: (context) {
+                    final plantTypes = admin.existingPlantSpecies;
+                    final safeValue = plantTypes.contains(_selectedPlantType)
+                        ? _selectedPlantType
+                        : null;
+                    return DropdownButton<String>(
+                      isExpanded: true,
+                      hint: plantTypes.isEmpty
+                          ? const Text('No plant types found')
+                          : const Text('Select Plant Type'),
+                      value: safeValue,
+                      items: plantTypes
+                          .map((type) => DropdownMenuItem(
+                                value: type,
+                                child: Text(type),
+                              ))
+                          .toList(),
+                      onChanged: plantTypes.isEmpty
+                          ? null
+                          : (val) => setState(() => _selectedPlantType = val),
+                    );
+                  }),
                 ),
               ),
               const SizedBox(height: 16),
@@ -1638,18 +1620,28 @@ class _CustomNotificationSenderPageState
                   border: Border.all(color: cs.outline.withOpacity(0.2)),
                 ),
                 child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    isExpanded: true,
-                    hint: const Text('Select Disease'),
-                    value: _selectedDisease,
-                    items: diseaseTypes
-                        .map((disease) => DropdownMenuItem(
-                              value: disease,
-                              child: Text(disease),
-                            ))
-                        .toList(),
-                    onChanged: (val) => setState(() => _selectedDisease = val),
-                  ),
+                  child: Builder(builder: (context) {
+                    final diseaseTypes = admin.existingDiseaseTypes;
+                    final safeValue = diseaseTypes.contains(_selectedDisease)
+                        ? _selectedDisease
+                        : null;
+                    return DropdownButton<String>(
+                      isExpanded: true,
+                      hint: diseaseTypes.isEmpty
+                          ? const Text('No disease types found')
+                          : const Text('Select Disease'),
+                      value: safeValue,
+                      items: diseaseTypes
+                          .map((disease) => DropdownMenuItem(
+                                value: disease,
+                                child: Text(disease),
+                              ))
+                          .toList(),
+                      onChanged: diseaseTypes.isEmpty
+                          ? null
+                          : (val) => setState(() => _selectedDisease = val),
+                    );
+                  }),
                 ),
               ),
               const SizedBox(height: 8),
@@ -1824,32 +1816,35 @@ class _CustomNotificationSenderPageState
                               }
                               break;
                             case 'plantType':
-                              for (var community in admin.communities) {
-                                if (!_allCommunities &&
-                                    community.name != _selectedCommunity) {
-                                  continue;
-                                }
-                                for (var member in community.members) {
-                                  if (member.stats.any(
-                                      (s) => s.type == _selectedPlantType)) {
-                                    if (member.id.isNotEmpty) {
+                              if (_selectedPlantType != null) {
+                                final owners = admin
+                                    .getUserIdsForSpecies(_selectedPlantType!);
+                                for (var community in admin.communities) {
+                                  if (!_allCommunities &&
+                                      community.name != _selectedCommunity) {
+                                    continue;
+                                  }
+                                  for (var member in community.members) {
+                                    if (member.id.isNotEmpty &&
+                                        owners.contains(member.id)) {
                                       memberIds.add(member.id);
                                     }
                                   }
+                                }
+                                // If no community scoping, send to all owners
+                                if (!_allCommunities &&
+                                    _selectedCommunity == null) {
+                                  memberIds.addAll(
+                                      owners.where((id) => id.isNotEmpty));
                                 }
                               }
                               break;
                             case 'disease':
-                              for (var community in admin.communities) {
-                                for (var member in community.members) {
-                                  if (member.stats.any((s) =>
-                                      s.action == 'Health Scan' ||
-                                      s.action == 'Disease Detection')) {
-                                    if (member.id.isNotEmpty) {
-                                      memberIds.add(member.id);
-                                    }
-                                  }
-                                }
+                              if (_selectedDisease != null) {
+                                final owners = admin
+                                    .getUserIdsForDisease(_selectedDisease!);
+                                memberIds.addAll(
+                                    owners.where((id) => id.isNotEmpty));
                               }
                               break;
                           }

@@ -2,6 +2,7 @@
 import 'package:appwrite/appwrite.dart';
 import 'package:flutter/material.dart';
 import '../config/appwrite_constants.dart';
+import '../models/plant_model.dart';
 import '../models/user_model.dart';
 import '../models/community_model.dart';
 import 'appwrite_service.dart';
@@ -481,6 +482,22 @@ class AdminDatabaseService {
     } catch (e) {
       debugPrint('AdminDB: Failed to get health distribution: $e');
       return {};
+    }
+  }
+
+  /// Fetch all plants from the plants collection.
+  Future<List<PlantModel>> listAllPlants() async {
+    try {
+      final res = await _appwrite.getDocuments(
+        collectionId: AppwriteConstants.plantsCollection,
+        queries: [Query.limit(500)],
+      );
+      return (res.documents as List)
+          .map((d) => PlantModel.fromJson(d.data))
+          .toList();
+    } catch (e) {
+      debugPrint('AdminDB: Failed to list all plants: $e');
+      return [];
     }
   }
 

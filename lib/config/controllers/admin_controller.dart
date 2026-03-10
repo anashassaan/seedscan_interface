@@ -244,6 +244,12 @@ class AdminController extends ChangeNotifier {
   // ── Local state (populated from Appwrite) ──────────────────────────────────
   List<AdminCommunity> _communities = [];
   Map<String, int> _plantHealth = {};
+
+  /// species → Set<guardianId>
+  Map<String, Set<String>> _speciesOwners = {};
+
+  /// health_status → Set<guardianId>  (only non-healthy statuses)
+  Map<String, Set<String>> _healthOwners = {};
   bool _isInitialized = false;
   bool _useLocalFallback = false; // true when Appwrite is unreachable
   String _serverStatus = "Online";
@@ -336,6 +342,53 @@ class AdminController extends ChangeNotifier {
       result[community.name] = communityScans;
     }
     return result;
+  }
+
+  /// Distinct plant species that actually exist (from plants collection + QR codes).
+  List<String> get existingPlantSpecies {
+    final species = <String>{};
+    // Primary: species from the plants collection
+    species.addAll(_speciesOwners.keys);
+    // Supplement: plant names from QR codes (may not match a guardian yet)
+    for (final qrList in _communityQrCodes.values) {
+      for (final qr in qrList) {
+        final name = qr.plantName.trim();
+        if (name.isNotEmpty) species.add(name);
+      }
+    }
+    return species.toList()..sort();
+  }
+
+  /// Returns the set of guardian user IDs who own plants of [species].
+  Set<String> getUserIdsForSpecies(String species) =>
+      _speciesOwners[species] ?? {};
+
+  /// Display label → Appwrite health_status key.
+  static String _diseaseDisplayToStatus(String label) {
+    switch (label) {
+      case 'Critical Condition':
+        return 'critical';
+      case 'Dead / Deceased':
+        return 'dead';
+      default:
+        return 'diseased';
+    }
+  }
+
+  /// Returns the set of guardian user IDs whose plants match [displayLabel].
+  Set<String> getUserIdsForDisease(String displayLabel) =>
+      _healthOwners[_diseaseDisplayToStatus(displayLabel)] ?? {};
+
+  /// Human-readable disease labels that have affected plants in the community.
+  List<String> get existingDiseaseTypes {
+    final types = <String>[];
+    if ((_healthOwners['diseased']?.isNotEmpty ?? false) ||
+        (_plantHealth['diseased'] ?? 0) > 0) types.add('Diseased');
+    if ((_healthOwners['critical']?.isNotEmpty ?? false) ||
+        (_plantHealth['critical'] ?? 0) > 0) types.add('Critical Condition');
+    if ((_healthOwners['dead']?.isNotEmpty ?? false) ||
+        (_plantHealth['dead'] ?? 0) > 0) types.add('Dead / Deceased');
+    return types;
   }
 
   /// All planting stats across every community member, with their dates.
@@ -458,6 +511,21 @@ class AdminController extends ChangeNotifier {
       if (qrDocs.isNotEmpty) {
         _communityQrCodes[i] =
             qrDocs.map((d) => PlantQrCode.fromJson(d)).toList();
+      }
+    }
+
+    // 7. Load all plants to build species→owners and health→owners maps
+    final allPlants = await _adminDb.listAllPlants();
+    _speciesOwners = {};
+    _healthOwners = {};
+    for (final plant in allPlants) {
+      final species = plant.species.trim();
+      if (species.isNotEmpty) {
+        _speciesOwners.putIfAbsent(species, () => {}).add(plant.guardianId);
+      }
+      final status = plant.healthStatus.trim().toLowerCase();
+      if (status.isNotEmpty && status != 'healthy') {
+        _healthOwners.putIfAbsent(status, () => {}).add(plant.guardianId);
       }
     }
   }
