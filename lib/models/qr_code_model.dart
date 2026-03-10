@@ -29,11 +29,10 @@ class DriveModel {
       status: json['status'] ?? 'active',
       targetCount: json['target_count'] ?? 0,
       aliveCount: json['alive_count'] ?? 0,
-      startDate: DateTime.parse(
-        json['start_date'] ??
-            json['\$createdAt'] ??
-            DateTime.now().toIso8601String(),
-      ),
+      startDate: DateTime.tryParse(
+            json['start_date'] ?? json['\$createdAt'] ?? '',
+          ) ??
+          DateTime.now(),
     );
   }
 
@@ -123,11 +122,10 @@ class UserFcmToken {
       userId: json['user_id'] ?? '',
       fcmToken: json['fcm_token'] ?? '',
       devicePlatform: json['device_platform'],
-      updatedAt: DateTime.parse(
-        json['updated_at'] ??
-            json['\$updatedAt'] ??
-            DateTime.now().toIso8601String(),
-      ),
+      updatedAt: DateTime.tryParse(
+            json['updated_at'] ?? json['\$updatedAt'] ?? '',
+          ) ??
+          DateTime.now(),
     );
   }
 
@@ -170,12 +168,13 @@ class QRCodeModel {
       id: json['\$id'] ?? json['id'] ?? '',
       code: json['code'] ?? '',
       type: json['type'] ?? 'plant',
-      generatedAt: DateTime.parse(json['generatedAt'] ??
-          json['\$createdAt'] ??
-          DateTime.now().toIso8601String()),
+      generatedAt:
+          DateTime.tryParse(json['generatedAt'] ?? json['\$createdAt'] ?? '') ??
+              DateTime.now(),
       assignedTo: json['assignedTo'],
-      scannedAt:
-          json['scannedAt'] != null ? DateTime.parse(json['scannedAt']) : null,
+      scannedAt: json['scannedAt'] != null
+          ? DateTime.tryParse(json['scannedAt'].toString())
+          : null,
       plantId: json['plantId'],
       isUsed: json['isUsed'] ?? false,
       batchId: json['batchId'],

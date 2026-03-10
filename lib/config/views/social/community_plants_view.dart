@@ -6,20 +6,38 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:permission_handler/permission_handler.dart';
 import '../../controllers/community_controller.dart';
 import '../../controllers/scan_controller.dart';
+import '../../controllers/auth_controller.dart';
 import '../../../models/community_model.dart';
+import '../../../services/database_service.dart';
+import '../../appwrite_constants.dart';
 
-class CommunityPlantsView extends StatelessWidget {
+class CommunityPlantsView extends StatefulWidget {
   final Community community;
 
   const CommunityPlantsView({super.key, required this.community});
 
   @override
+  State<CommunityPlantsView> createState() => _CommunityPlantsViewState();
+}
+
+class _CommunityPlantsViewState extends State<CommunityPlantsView> {
+  @override
+  void initState() {
+    super.initState();
+    // Trigger Appwrite fetch every time this screen mounts
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Provider.of<CommunityController>(context, listen: false)
+          .loadCommunityPlantsFromServer(widget.community.id);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final community = widget.community;
 
     return Scaffold(
       body: NestedScrollView(
@@ -49,6 +67,9 @@ class CommunityPlantsView extends StatelessWidget {
                     if (community.imageUrl != null)
                       Image.network(
                         community.imageUrl!,
+                        headers: const {
+                          'X-Appwrite-Project': AppwriteConstants.projectId
+                        },
                         fit: BoxFit.cover,
                         errorBuilder: (context, error, stackTrace) {
                           return Container(
@@ -93,8 +114,20 @@ class CommunityPlantsView extends StatelessWidget {
           builder: (context, communityController, _) {
             final plants = communityController.getCommunityPlants(community.id);
 
+            if (communityController.isLoadingCommunityPlants &&
+                plants.isEmpty) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
             if (plants.isEmpty) {
-              return _buildEmptyState(context);
+              return RefreshIndicator(
+                onRefresh: () => communityController
+                    .loadCommunityPlantsFromServer(community.id),
+                child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  children: [_buildEmptyState(context)],
+                ),
+              );
             }
 
             return Column(
@@ -140,16 +173,21 @@ class CommunityPlantsView extends StatelessWidget {
                 ),
                 // Plants List
                 Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: plants.length,
-                    itemBuilder: (context, index) {
-                      final plant = plants[index];
-                      return _CommunityPlantCard(
-                        plant: plant,
-                        communityId: community.id,
-                      );
-                    },
+                  child: RefreshIndicator(
+                    onRefresh: () => communityController
+                        .loadCommunityPlantsFromServer(community.id),
+                    child: ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16),
+                      itemCount: plants.length,
+                      itemBuilder: (context, index) {
+                        final plant = plants[index];
+                        return _CommunityPlantCard(
+                          plant: plant,
+                          communityId: community.id,
+                        );
+                      },
+                    ),
                   ),
                 ),
               ],
@@ -200,7 +238,7 @@ class CommunityPlantsView extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             Text(
-              'Be the first to add a plant to ${community.name}!',
+              'Be the first to add a plant to ${widget.community.name}!',
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
                 fontSize: 14,
@@ -229,6 +267,7 @@ class CommunityPlantsView extends StatelessWidget {
 
   void _showCommunityInfo(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final community = widget.community;
 
     showDialog(
       context: context,
@@ -356,6 +395,9 @@ class _CommunityPlantCard extends StatelessWidget {
                     const BorderRadius.vertical(top: Radius.circular(16)),
                 child: Image.network(
                   plant.imageUrl!,
+                  headers: const {
+                    'X-Appwrite-Project': AppwriteConstants.projectId
+                  },
                   height: 180,
                   width: double.infinity,
                   fit: BoxFit.cover,
@@ -507,6 +549,9 @@ class _CommunityPlantCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(16),
                         child: Image.network(
                           plant.imageUrl!,
+                          headers: const {
+                            'X-Appwrite-Project': AppwriteConstants.projectId
+                          },
                           height: 300,
                           width: double.infinity,
                           fit: BoxFit.cover,
@@ -1001,22 +1046,13 @@ class _CommunityPlantCard extends StatelessWidget {
                       source: ImageSource.gallery,
                     );
                     if (image != null) {
-                      communityController.updatePlantImage(
-                        communityId,
-                        plant.id,
-                        image.path,
+                      await _uploadAndLogPlantImage(
+                        context: context,
+                        imagePath: image.path,
+                        plant: plant,
+                        communityId: communityId,
+                        communityController: communityController,
                       );
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Plant image updated successfully!',
-                              style: GoogleFonts.poppins(),
-                            ),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      }
                     }
                   },
                 ),
@@ -1035,22 +1071,13 @@ class _CommunityPlantCard extends StatelessWidget {
                       source: ImageSource.camera,
                     );
                     if (image != null) {
-                      communityController.updatePlantImage(
-                        communityId,
-                        plant.id,
-                        image.path,
+                      await _uploadAndLogPlantImage(
+                        context: context,
+                        imagePath: image.path,
+                        plant: plant,
+                        communityId: communityId,
+                        communityController: communityController,
                       );
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Plant image updated successfully!',
-                              style: GoogleFonts.poppins(),
-                            ),
-                            backgroundColor: Colors.green,
-                          ),
-                        );
-                      }
                     }
                   },
                 ),
@@ -1060,5 +1087,71 @@ class _CommunityPlantCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Uploads [imagePath] to Appwrite Storage, updates the plant document's
+/// image_url, creates an activity_log entry so admin history is populated,
+/// then refreshes the in-memory community plant list.
+Future<void> _uploadAndLogPlantImage({
+  required BuildContext context,
+  required String imagePath,
+  required CommunityPlant plant,
+  required String communityId,
+  required CommunityController communityController,
+}) async {
+  try {
+    final db = DatabaseService();
+    final fileId = await db.uploadPlantImage(imagePath);
+    final imageUrl = db.getPlantImageUrl(fileId);
+
+    // 1. Optimistically update in-memory list so the card refreshes immediately.
+    communityController.updatePlantImage(communityId, plant.id, imageUrl);
+
+    // 2. Persist updated image URL on the plant document in Appwrite.
+    try {
+      await db.updatePlant(plant.id, {'image_url': imageUrl});
+    } catch (e) {
+      debugPrint('CommunityPlants: updatePlant image_url failed: $e');
+    }
+
+    // 3. Write an activity log so the admin history timeline shows this change.
+    try {
+      if (context.mounted) {
+        final auth = Provider.of<AuthController>(context, listen: false);
+        await db.createActivityLog(
+          userId: auth.userId ?? '',
+          plantId: plant.id,
+          actionType: 'image_update',
+          coinsAwarded: 0,
+          verificationStatus: 'verified',
+          proofImageId: fileId,
+        );
+      }
+    } catch (e) {
+      debugPrint('CommunityPlants: createActivityLog failed: $e');
+    }
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Plant image updated successfully!',
+              style: GoogleFonts.poppins()),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  } catch (e) {
+    debugPrint('CommunityPlants: uploadPlantImage failed: $e');
+    // Fall back to showing the local file path so the card still updates.
+    communityController.updatePlantImage(communityId, plant.id, imagePath);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Image saved locally.', style: GoogleFonts.poppins()),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    }
   }
 }

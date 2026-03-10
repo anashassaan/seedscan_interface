@@ -13,7 +13,6 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:csv/csv.dart';
-import 'package:share_plus/share_plus.dart';
 import '../../controllers/admin_controller.dart';
 
 class QrCodeManagerView extends StatefulWidget {

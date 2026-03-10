@@ -7,6 +7,7 @@ import '../../controllers/community_controller.dart';
 import '../../controllers/auth_controller.dart';
 import '../../../models/community_model.dart';
 import 'community_plants_view.dart';
+import '../../appwrite_constants.dart';
 
 class CommunityView extends StatefulWidget {
   const CommunityView({super.key});
@@ -200,6 +201,9 @@ class _CommunityCard extends StatelessWidget {
                   child: community.imageUrl != null
                       ? Image.network(
                           community.imageUrl!,
+                          headers: const {
+                            'X-Appwrite-Project': AppwriteConstants.projectId
+                          },
                           height: 160,
                           width: double.infinity,
                           fit: BoxFit.cover,

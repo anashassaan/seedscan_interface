@@ -47,11 +47,10 @@ class Community {
       plantCount: json['plant_count'] ?? 0,
       category: json['category'] ?? 'General',
       isActive: json['is_active'] ?? true,
-      createdAt: DateTime.parse(
-        json['created_at'] ??
-            json['\$createdAt'] ??
-            DateTime.now().toIso8601String(),
-      ),
+      createdAt: DateTime.tryParse(
+            json['created_at'] ?? json['\$createdAt'] ?? '',
+          ) ??
+          DateTime.now(),
     );
   }
 
@@ -145,11 +144,10 @@ class CommunityPost {
       linkedPlantId: json['linked_plant_id'],
       likesCount: json['likes_count'] ?? 0,
       commentsCount: json['comments_count'] ?? 0,
-      createdAt: DateTime.parse(
-        json['created_at'] ??
-            json['\$createdAt'] ??
-            DateTime.now().toIso8601String(),
-      ),
+      createdAt: DateTime.tryParse(
+            json['created_at'] ?? json['\$createdAt'] ?? '',
+          ) ??
+          DateTime.now(),
     );
   }
 
@@ -194,11 +192,10 @@ class CommunityComment {
       authorId: json['author_id'] ?? '',
       authorName: json['author_name'] ?? '',
       content: json['content'] ?? '',
-      createdAt: DateTime.parse(
-        json['created_at'] ??
-            json['\$createdAt'] ??
-            DateTime.now().toIso8601String(),
-      ),
+      createdAt: DateTime.tryParse(
+            json['created_at'] ?? json['\$createdAt'] ?? '',
+          ) ??
+          DateTime.now(),
     );
   }
 
@@ -232,11 +229,10 @@ class CommunityLike {
       id: json['\$id'] ?? json['id'] ?? '',
       postId: json['post_id'] ?? '',
       userId: json['user_id'] ?? '',
-      createdAt: DateTime.parse(
-        json['created_at'] ??
-            json['\$createdAt'] ??
-            DateTime.now().toIso8601String(),
-      ),
+      createdAt: DateTime.tryParse(
+            json['created_at'] ?? json['\$createdAt'] ?? '',
+          ) ??
+          DateTime.now(),
     );
   }
 
@@ -271,11 +267,10 @@ class CommunityMember {
       communityId: json['community_id'] ?? '',
       userId: json['user_id'] ?? '',
       role: json['role'] ?? 'member',
-      joinedAt: DateTime.parse(
-        json['joined_at'] ??
-            json['\$createdAt'] ??
-            DateTime.now().toIso8601String(),
-      ),
+      joinedAt: DateTime.tryParse(
+            json['joined_at'] ?? json['\$createdAt'] ?? '',
+          ) ??
+          DateTime.now(),
     );
   }
 
@@ -376,6 +371,51 @@ class CommunityPlant {
       tags: tags ?? this.tags,
     );
   }
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'communityId': communityId,
+        'plantName': plantName,
+        'scientificName': scientificName,
+        'plantedBy': plantedBy,
+        'plantedByUsername': plantedByUsername,
+        'plantedByAvatar': plantedByAvatar,
+        'location': location,
+        'latitude': latitude,
+        'longitude': longitude,
+        'imageUrl': imageUrl,
+        'plantedDate': plantedDate.toIso8601String(),
+        'status': status,
+        'category': category,
+        'description': description,
+        'likeCount': likeCount,
+        'commentCount': commentCount,
+        'isLiked': isLiked,
+        'tags': tags,
+      };
+
+  factory CommunityPlant.fromMap(Map<String, dynamic> m) => CommunityPlant(
+        id: m['id'] as String? ?? '',
+        communityId: m['communityId'] as String? ?? '',
+        plantName: m['plantName'] as String? ?? '',
+        scientificName: m['scientificName'] as String? ?? '',
+        plantedBy: m['plantedBy'] as String? ?? '',
+        plantedByUsername: m['plantedByUsername'] as String? ?? '',
+        plantedByAvatar: m['plantedByAvatar'] as String?,
+        location: m['location'] as String? ?? '',
+        latitude: (m['latitude'] as num?)?.toDouble(),
+        longitude: (m['longitude'] as num?)?.toDouble(),
+        imageUrl: m['imageUrl'] as String?,
+        plantedDate: DateTime.tryParse(m['plantedDate'] as String? ?? '') ??
+            DateTime.now(),
+        status: m['status'] as String? ?? 'Healthy',
+        category: m['category'] as String? ?? '',
+        description: m['description'] as String?,
+        likeCount: m['likeCount'] as int? ?? 0,
+        commentCount: m['commentCount'] as int? ?? 0,
+        isLiked: m['isLiked'] as bool? ?? false,
+        tags: List<String>.from(m['tags'] as List? ?? []),
+      );
 
   Color get statusColor {
     switch (status.toLowerCase()) {

@@ -2,9 +2,32 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/scan_controller.dart';
+import '../../controllers/auth_controller.dart';
+import '../../appwrite_constants.dart';
 
-class MyPlantsScreen extends StatelessWidget {
+class MyPlantsScreen extends StatefulWidget {
   const MyPlantsScreen({super.key});
+
+  @override
+  State<MyPlantsScreen> createState() => _MyPlantsScreenState();
+}
+
+class _MyPlantsScreenState extends State<MyPlantsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Trigger a load whenever this screen is shown (no-op while already loading)
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadPlants());
+  }
+
+  Future<void> _loadPlants() async {
+    if (!mounted) return;
+    final auth = Provider.of<AuthController>(context, listen: false);
+    final uid = auth.userId ?? '';
+    if (uid.isEmpty) return;
+    final scanCtrl = Provider.of<ScanController>(context, listen: false);
+    await scanCtrl.loadMyPlants(uid);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -35,43 +58,65 @@ class MyPlantsScreen extends StatelessWidget {
 
     // Empty state
     if (plants.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.eco_outlined,
-                  size: 72, color: cs.primary.withOpacity(0.4)),
-              const SizedBox(height: 16),
-              Text(
-                'No plants yet',
-                style: GoogleFonts.poppins(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: cs.onSurface,
+      return RefreshIndicator(
+        onRefresh: _loadPlants,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          children: [
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.6,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.eco_outlined,
+                          size: 72, color: cs.primary.withOpacity(0.4)),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No plants yet',
+                        style: GoogleFonts.poppins(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Scan a garden QR code to add your first plant.',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: cs.onSurface.withOpacity(0.5),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Pull down to refresh',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: cs.onSurface.withOpacity(0.35),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Scan a garden QR code to add your first plant.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  color: cs.onSurface.withOpacity(0.5),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }
 
     // Real plant list
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: plants.length,
-      itemBuilder: (context, index) => _plantTile(context, cs, plants[index]),
+    return RefreshIndicator(
+      onRefresh: _loadPlants,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: plants.length,
+        itemBuilder: (context, index) => _plantTile(context, cs, plants[index]),
+      ),
     );
   }
 
@@ -90,6 +135,9 @@ class MyPlantsScreen extends StatelessWidget {
             child: plant.image.isNotEmpty && plant.image.startsWith('http')
                 ? Image.network(
                     plant.image,
+                    headers: const {
+                      'X-Appwrite-Project': AppwriteConstants.projectId
+                    },
                     fit: BoxFit.cover,
                     errorBuilder: (_, __, ___) => _imagePlaceholder(cs),
                   )

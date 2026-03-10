@@ -34,15 +34,25 @@ const storage = new sdk.Storage(client);
 // Helper: create storage bucket if it doesn't exist
 async function ensureBucket(id, name) {
   try {
-    await storage.getBucket(id);
+    const existing = await storage.getBucket(id);
     console.log(`  ✓ Bucket "${name}" already exists`);
+    // Fix: ensure fileSecurity is enabled and read is public on existing buckets
+    if (!existing.fileSecurity) {
+      await storage.updateBucket(id, name, [
+        sdk.Permission.read(sdk.Role.any()),
+        sdk.Permission.create(sdk.Role.users()),
+        sdk.Permission.update(sdk.Role.users()),
+        sdk.Permission.delete(sdk.Role.users()),
+      ], true, true, 10485760);
+      console.log(`  ↑ Updated bucket "${name}": enabled fileSecurity + Role.any() read`);
+    }
   } catch {
     await storage.createBucket(id, name, [
-      sdk.Permission.read(sdk.Role.users()),
+      sdk.Permission.read(sdk.Role.any()),
       sdk.Permission.create(sdk.Role.users()),
       sdk.Permission.update(sdk.Role.users()),
       sdk.Permission.delete(sdk.Role.users()),
-    ], false, undefined, undefined, 10485760); // 10 MB max file size
+    ], true, undefined, undefined, 10485760); // fileSecurity: true, 10 MB max
     console.log(`  ✓ Created bucket "${name}"`);
   }
 }
@@ -115,6 +125,26 @@ async function attr(collectionId, type, key, opts = {}) {
   }
 }
 
+// Helper: create a key index on a collection attribute if it doesn't exist.
+// type: 'key' (default for equality queries), 'unique', or 'fulltext'.
+async function ensureIndex(collectionId, indexKey, attributes, orders, type = 'key') {
+  try {
+    await databases.getIndex(DATABASE_ID, collectionId, indexKey);
+    console.log(`    · index ${collectionId}[${indexKey}] already exists`);
+  } catch {
+    try {
+      await databases.createIndex(DATABASE_ID, collectionId, indexKey, type, attributes, orders);
+      console.log(`    + index ${collectionId}[${indexKey}] (${type})`);
+    } catch (e) {
+      if (e.code === 409) {
+        console.log(`    · index ${collectionId}[${indexKey}] already exists`);
+      } else {
+        console.error(`    ✗ index ${collectionId}[${indexKey}]: ${e.message}`);
+      }
+    }
+  }
+}
+
 // Small delay to let Appwrite index attributes
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -169,6 +199,9 @@ async function main() {
   await attr("community_members", "string", "user_id");
   await attr("community_members", "string", "role",         { size: 20, default: "member" });
   await attr("community_members", "string", "joined_at");
+  await sleep(2000);
+  await ensureIndex("community_members", "idx_community_id", ["community_id"], ["ASC"]);
+  await ensureIndex("community_members", "idx_user_id",      ["user_id"],      ["ASC"]);
   await sleep(1000);
 
   // ──────────────────────────────────
@@ -225,6 +258,10 @@ async function main() {
   await attr("plants", "string",  "image_url",        { size: 500 });
   await attr("plants", "string",  "last_watered");
   await attr("plants", "string",  "phash_history",    { array: true });
+  await sleep(2000); // wait for attributes to be ready before creating indexes
+  // Indexes required for Query.equal() filtering in the Flutter app
+  await ensureIndex("plants", "idx_guardian_id",  ["guardian_id"],  ["ASC"]);
+  await ensureIndex("plants", "idx_drive_id",     ["drive_id"],     ["ASC"]);
   await sleep(1000);
 
   // ──────────────────────────────────
@@ -241,6 +278,9 @@ async function main() {
   await attr("activity_logs", "string",  "rejection_reason",      { size: 500 });
   await attr("activity_logs", "string",  "plant_species");
   await attr("activity_logs", "string",  "created_at");
+  await sleep(2000); // wait for attributes before indexes
+  await ensureIndex("activity_logs", "idx_plant_id",  ["plant_id"],  ["ASC"]);
+  await ensureIndex("activity_logs", "idx_user_id",   ["user_id"],   ["ASC"]);
   await sleep(1000);
 
   // ──────────────────────────────────

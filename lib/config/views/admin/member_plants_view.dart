@@ -9,11 +9,15 @@ import 'package:cached_network_image/cached_network_image.dart';
 class MemberPlantsView extends StatefulWidget {
   final String userId;
   final String userName;
+  final String communityId;
+  final String communityName;
 
   const MemberPlantsView({
     Key? key,
     required this.userId,
     required this.userName,
+    required this.communityId,
+    this.communityName = '',
   }) : super(key: key);
 
   @override
@@ -39,7 +43,8 @@ class _MemberPlantsViewState extends State<MemberPlantsView> {
 
     try {
       final admin = Provider.of<AdminController>(context, listen: false);
-      final plants = await admin.getUserPlants(widget.userId);
+      final plants = await admin.getCommunityMemberPlants(
+          widget.userId, widget.communityId);
       if (mounted) {
         setState(() {
           _plants = plants;
@@ -49,7 +54,7 @@ class _MemberPlantsViewState extends State<MemberPlantsView> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = "Failed to load plants: \$e";
+          _error = "Failed to load plants: $e";
           _isLoading = false;
         });
       }
@@ -77,7 +82,8 @@ class _MemberPlantsViewState extends State<MemberPlantsView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('${widget.userName}\'s Plants'),
+        title: Text('${widget.userName}\'s Plants'
+            '${widget.communityName.isNotEmpty ? ' · ${widget.communityName}' : ''}'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -115,6 +121,17 @@ class _MemberPlantsViewState extends State<MemberPlantsView> {
                           Text('No plants found for this member.',
                               style: TextStyle(
                                   color: cs.onSurface.withOpacity(0.6))),
+                          const SizedBox(height: 8),
+                          Text(
+                            'This member has not yet planted any trees\n'
+                            'in this community, or plants were created\n'
+                            'before community linking was supported.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: cs.onSurface.withOpacity(0.4),
+                            ),
+                          ),
                         ],
                       ),
                     )

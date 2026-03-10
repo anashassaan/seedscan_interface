@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../config/appwrite_constants.dart';
 import '../models/user_model.dart';
 import '../models/community_model.dart';
-import '../models/notification_model.dart';
 import 'appwrite_service.dart';
 import 'database_service.dart';
 
@@ -50,8 +49,9 @@ class AdminDatabaseService {
     String? imageUrl,
     String category = 'General',
   }) async {
+    final sanitizedName = name.replaceAll(' ', '');
     final inviteCode =
-        '${name.replaceAll(' ', '').substring(0, name.length.clamp(0, 4)).toUpperCase()}-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
+        '${sanitizedName.substring(0, sanitizedName.length.clamp(0, 4)).toUpperCase()}-${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}';
     final data = <String, dynamic>{
       'name': name,
       'description': description,
@@ -240,7 +240,7 @@ class AdminDatabaseService {
         queries: [Query.limit(500), Query.orderDesc('\$createdAt')],
       );
       return (res.documents as List)
-          .map((d) => d.data as Map<String, dynamic>)
+          .map((d) => Map<String, dynamic>.from(d.data))
           .toList();
     } catch (e) {
       debugPrint('AdminDB: Failed to list activity logs: $e');
@@ -316,7 +316,7 @@ class AdminDatabaseService {
         ],
       );
       return (res.documents as List).map((d) {
-        final data = d.data as Map<String, dynamic>;
+        final data = Map<String, dynamic>.from(d.data);
         data['id'] = d.$id;
         return data;
       }).toList();
@@ -435,7 +435,7 @@ class AdminDatabaseService {
         ],
       );
       return (res.documents as List).map((d) {
-        final data = d.data as Map<String, dynamic>;
+        final data = Map<String, dynamic>.from(d.data);
         data['id'] = d.$id;
         return data;
       }).toList();

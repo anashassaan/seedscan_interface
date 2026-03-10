@@ -10,9 +10,9 @@ import '../../controllers/scan_controller.dart';
 import '../../controllers/wallet_controller.dart';
 import '../../controllers/community_controller.dart';
 import '../notifications/notifications_view.dart';
+import '../../appwrite_constants.dart';
 
 // REAL SCREENS
-import '../home/my_plants_screen.dart';
 import '../home/my_garden_screen.dart';
 import '../home/wallet_screen.dart';
 import '../home/tasks_screen.dart';
@@ -448,6 +448,9 @@ class HomeView extends StatelessWidget {
             Expanded(
               child: img.isNotEmpty && img.startsWith('http')
                   ? Image.network(img,
+                      headers: const {
+                        'X-Appwrite-Project': AppwriteConstants.projectId
+                      },
                       width: double.infinity,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(

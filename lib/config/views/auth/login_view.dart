@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/community_controller.dart';
 import '../../controllers/scan_controller.dart';
+import '../../controllers/notification_controller.dart';
 import '../common/custom_button.dart';
 import '../common/custom_text_field.dart';
 import 'role_selection_view.dart';
@@ -49,9 +50,12 @@ class _LoginViewState extends State<LoginView> {
       final communityCtrl =
           Provider.of<CommunityController>(context, listen: false);
       final scanCtrl = Provider.of<ScanController>(context, listen: false);
+      final notifCtrl =
+          Provider.of<NotificationController>(context, listen: false);
       Future.wait([
         communityCtrl.loadUserCommunities(uid),
         scanCtrl.loadMyPlants(uid),
+        notifCtrl.initialize(uid),
       ]);
     }
   }

@@ -56,15 +56,14 @@ class NotificationModel {
       scheduleFrequency: json['schedule_frequency'] ?? 'none',
       customIntervalDays: json['custom_interval_days'],
       nextScheduledAt: json['next_scheduled_at'] != null
-          ? DateTime.parse(json['next_scheduled_at'])
+          ? DateTime.tryParse(json['next_scheduled_at'].toString())
           : null,
       isRecurring: json['is_recurring'] ?? false,
       isRead: json['is_read'] ?? false,
-      createdAt: DateTime.parse(
-        json['created_at'] ??
-            json['\$createdAt'] ??
-            DateTime.now().toIso8601String(),
-      ),
+      createdAt: DateTime.tryParse(
+            json['created_at'] ?? json['\$createdAt'] ?? '',
+          ) ??
+          DateTime.now(),
     );
   }
 

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../../models/community_model.dart';
 import '../../services/database_service.dart';
+import '../../services/garden_cache_service.dart';
 
 class CommunityController extends ChangeNotifier {
   final DatabaseService _db = DatabaseService();
@@ -12,6 +13,9 @@ class CommunityController extends ChangeNotifier {
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
+
+  bool _isLoadingCommunityPlants = false;
+  bool get isLoadingCommunityPlants => _isLoadingCommunityPlants;
 
   /// Load all communities that the given [userId] is a member of from Appwrite.
   Future<void> loadUserCommunities(String userId) async {
@@ -35,6 +39,19 @@ class CommunityController extends ChangeNotifier {
       _communities
         ..clear()
         ..addAll(loaded);
+
+      // Restore cached plants for each community that has no in-memory data
+      for (final community in loaded) {
+        if (!_communityPlants.containsKey(community.id) ||
+            _communityPlants[community.id]!.isEmpty) {
+          final cached =
+              GardenCacheService.getCommunityPlantsCache(community.id);
+          if (cached != null && cached.isNotEmpty) {
+            _communityPlants[community.id] =
+                cached.map((m) => CommunityPlant.fromMap(m)).toList();
+          }
+        }
+      }
     } catch (e) {
       debugPrint('CommunityController.loadUserCommunities failed: $e');
     }
@@ -93,6 +110,25 @@ class CommunityController extends ChangeNotifier {
     return List.unmodifiable(_communityPlants[communityId] ?? []);
   }
 
+  /// Load/refresh all member plants for [communityId] from Appwrite.
+  Future<void> loadCommunityPlantsFromServer(String communityId) async {
+    if (_isLoadingCommunityPlants) return;
+    _isLoadingCommunityPlants = true;
+    notifyListeners();
+    try {
+      final plants = await _db.getCommunityMemberPlants(communityId);
+      _communityPlants[communityId] = plants;
+      notifyListeners();
+      _savePlantsToCache(communityId);
+    } catch (e) {
+      debugPrint(
+          'CommunityController.loadCommunityPlantsFromServer: $e');
+    } finally {
+      _isLoadingCommunityPlants = false;
+      notifyListeners();
+    }
+  }
+
   // Add plant to a community
   void addPlantToCommunity(CommunityPlant plant) {
     if (!_communityPlants.containsKey(plant.communityId)) {
@@ -110,6 +146,17 @@ class CommunityController extends ChangeNotifier {
       _communities[communityIndex] = updatedCommunity;
     }
     notifyListeners();
+    // Persist to Hive so plants survive app restart
+    _savePlantsToCache(plant.communityId);
+  }
+
+  void _savePlantsToCache(String communityId) {
+    try {
+      final plants = _communityPlants[communityId];
+      if (plants == null) return;
+      final maps = plants.map((p) => p.toMap()).toList();
+      GardenCacheService.saveCommunityPlants(communityId, maps);
+    } catch (_) {}
   }
 
   // Remove plant from community
@@ -184,6 +231,7 @@ class CommunityController extends ChangeNotifier {
         final updatedPlant = plant.copyWith(imageUrl: imagePath);
         _communityPlants[communityId]![plantIndex] = updatedPlant;
         notifyListeners();
+        _savePlantsToCache(communityId);
       }
     }
   }
@@ -204,6 +252,7 @@ class CommunityController extends ChangeNotifier {
         );
         _communityPlants[communityId]![plantIndex] = updatedPlant;
         notifyListeners();
+        _savePlantsToCache(communityId);
       }
     }
   }

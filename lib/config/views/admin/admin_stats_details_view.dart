@@ -1,8 +1,11 @@
 import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../controllers/admin_controller.dart';
+import '../../controllers/auth_controller.dart';
+import '../../../services/database_service.dart';
 
 // --- 1. AUTO NOTIFICATION SENDER PAGE ---
 class AutoNotificationSenderPage extends StatefulWidget {
@@ -199,18 +202,55 @@ class _AutoNotificationSenderPageState
                           _isSending = true;
                           _sent = false;
                         });
-                        // Simulate sending notifications
-                        await Future.delayed(const Duration(seconds: 2));
+                        final db = DatabaseService();
+                        final auth =
+                            Provider.of<AuthController>(context, listen: false);
+                        final adminId = auth.userId ?? 'admin';
+                        int sent = 0;
+                        try {
+                          // Collect unique member IDs across all communities
+                          final memberIds = <String>{};
+                          for (var community in admin.communities) {
+                            for (var member in community.members) {
+                              if (member.id.isNotEmpty)
+                                memberIds.add(member.id);
+                            }
+                          }
+                          if (memberIds.isNotEmpty) {
+                            for (final uid in memberIds) {
+                              await db.createNotification(
+                                recipientId: uid,
+                                senderId: adminId,
+                                type: 'watering',
+                                title: '\u{1F4A7} Watering Reminder',
+                                body:
+                                    "It's time to water your plants! Check your garden and give them some love today.",
+                              );
+                              sent++;
+                            }
+                          } else {
+                            // Broadcast to all if no specific members loaded
+                            await db.createNotification(
+                              recipientId: 'all',
+                              senderId: adminId,
+                              type: 'watering',
+                              title: '\u{1F4A7} Watering Reminder',
+                              body: "It's time to water your plants!",
+                            );
+                            sent = 1;
+                          }
+                        } catch (e) {
+                          debugPrint('[AutoNotify] error: \$e');
+                        }
                         setState(() {
                           _isSending = false;
                           _sent = true;
-                          _notificationsSent = allPlants.length;
+                          _notificationsSent = sent;
                         });
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text(
-                                  'Sent $_notificationsSent watering reminders!'),
+                              content: Text('Sent $sent watering reminders!'),
                               backgroundColor: Colors.green,
                             ),
                           );
@@ -424,20 +464,20 @@ class _TreeScansStatsPageState extends State<TreeScansStatsPage>
                 Row(
                   children: [
                     _buildHeaderStat(
-                      value: _formatNum(admin.totalScans),
-                      label: 'Total Scans',
-                      icon: LucideIcons.scan,
+                      value: _formatNum(admin.totalPlants),
+                      label: 'Trees Planted',
+                      icon: LucideIcons.treeDeciduous,
                     ),
                     const SizedBox(width: 12),
                     _buildHeaderStat(
-                      value:
-                          _formatNum(admin.totalScans - admin.diseasesDetected),
+                      value: _formatNum(admin.healthyPlants),
                       label: 'Healthy',
                       icon: LucideIcons.checkCircle,
                     ),
                     const SizedBox(width: 12),
                     _buildHeaderStat(
-                      value: _formatNum(admin.diseasesDetected),
+                      value:
+                          _formatNum(admin.diseasedPlants + admin.deadPlants),
                       label: 'Issues Found',
                       icon: LucideIcons.alertTriangle,
                     ),
@@ -546,49 +586,100 @@ class _TreeScansStatsPageState extends State<TreeScansStatsPage>
 
   Widget _buildTrendChart(
       ColorScheme cs, AdminController admin, String period) {
-    // Dynamic data based on selected period - synced with actual admin data
+    final now = DateTime.now();
+    final stats = admin.allPlantingStats;
+
     List<String> labels;
     List<int> values;
     String periodLabel;
-    String trendPercent;
     int highlightIndex;
-
-    // Base calculations from actual admin data
-    final totalAllTime = admin.totalScans;
 
     switch (period) {
       case 'Today':
         labels = ['6AM', '9AM', '12PM', '3PM', '6PM', '9PM'];
-        values = [0, 0, 0, 0, 0, 0];
+        values = List.filled(6, 0);
         periodLabel = 'Today';
-        trendPercent = '';
-        highlightIndex = DateTime.now().hour ~/ 3;
+        highlightIndex = (now.hour ~/ 3).clamp(0, 5);
+        for (final s in stats) {
+          final d = s.date;
+          if (d != null &&
+              d.year == now.year &&
+              d.month == now.month &&
+              d.day == now.day) {
+            final bucket = (d.hour ~/ 3).clamp(0, 5);
+            values[bucket]++;
+          }
+        }
         break;
       case 'This Week':
         labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-        values = [0, 0, 0, 0, 0, 0, 0];
+        values = List.filled(7, 0);
         periodLabel = '7 Days';
-        trendPercent = '';
-        highlightIndex = DateTime.now().weekday - 1;
+        highlightIndex = (now.weekday - 1).clamp(0, 6);
+        final weekStart = now.subtract(Duration(days: now.weekday - 1));
+        for (final s in stats) {
+          final d = s.date;
+          if (d != null &&
+              !d.isBefore(
+                  DateTime(weekStart.year, weekStart.month, weekStart.day))) {
+            final bucket = d.weekday - 1;
+            values[bucket]++;
+          }
+        }
         break;
       case 'This Month':
         labels = ['W1', 'W2', 'W3', 'W4'];
-        values = [0, 0, 0, 0];
+        values = List.filled(4, 0);
         periodLabel = '4 Weeks';
-        trendPercent = '';
-        highlightIndex = (DateTime.now().day - 1) ~/ 7;
+        highlightIndex = ((now.day - 1) ~/ 7).clamp(0, 3);
+        for (final s in stats) {
+          final d = s.date;
+          if (d != null && d.year == now.year && d.month == now.month) {
+            final bucket = ((d.day - 1) ~/ 7).clamp(0, 3);
+            values[bucket]++;
+          }
+        }
         break;
       case 'All Time':
       default:
-        labels = ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb'];
-        values = [0, 0, 0, 0, 0, 0];
+        // Last 6 calendar months ending this month
+        labels = List.generate(6, (i) {
+          final m = DateTime(now.year, now.month - 5 + i);
+          const abbr = [
+            'Jan',
+            'Feb',
+            'Mar',
+            'Apr',
+            'May',
+            'Jun',
+            'Jul',
+            'Aug',
+            'Sep',
+            'Oct',
+            'Nov',
+            'Dec'
+          ];
+          return abbr[m.month - 1];
+        });
+        values = List.filled(6, 0);
         periodLabel = '6 Months';
-        trendPercent = '';
-        highlightIndex = labels.length - 1;
+        highlightIndex = 5;
+        for (final s in stats) {
+          final d = s.date;
+          if (d == null) continue;
+          for (int i = 0; i < 6; i++) {
+            final m = DateTime(now.year, now.month - 5 + i);
+            if (d.year == m.year && d.month == m.month) {
+              values[i]++;
+              break;
+            }
+          }
+        }
         break;
     }
 
     final maxVal = values.reduce((a, b) => a > b ? a : b);
+    final safeMax = maxVal == 0 ? 1 : maxVal;
     final total = values.reduce((a, b) => a + b);
 
     return Container(
@@ -632,7 +723,7 @@ class _TreeScansStatsPageState extends State<TreeScansStatsPage>
                             const Icon(LucideIcons.trendingUp,
                                 color: Colors.green, size: 12),
                             const SizedBox(width: 4),
-                            Text(trendPercent,
+                            Text(total > 0 ? '+$total' : '—',
                                 style: const TextStyle(
                                     color: Colors.green,
                                     fontSize: 11,
@@ -663,7 +754,7 @@ class _TreeScansStatsPageState extends State<TreeScansStatsPage>
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: List.generate(labels.length, (i) {
-              final height = (values[i] / maxVal) * 100;
+              final height = (values[i] / safeMax) * 100;
               final isHighlighted =
                   i == highlightIndex.clamp(0, labels.length - 1);
               return Expanded(
@@ -721,6 +812,7 @@ class _TreeScansStatsPageState extends State<TreeScansStatsPage>
     );
   }
 
+  // ignore: unused_element
   Widget _buildAccuracyCard(ColorScheme cs) {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -871,28 +963,10 @@ class _TreeScansStatsPageState extends State<TreeScansStatsPage>
 
   Widget _buildHealthStatusChart(
       ColorScheme cs, AdminController admin, String period) {
-    // Period-based multipliers synced with actual admin data
-    double multiplier;
-    switch (period) {
-      case 'Today':
-        multiplier = 0.05;
-        break;
-      case 'This Week':
-        multiplier = 0.25;
-        break;
-      case 'This Month':
-        multiplier = 0.6;
-        break;
-      case 'All Time':
-      default:
-        multiplier = 1.0;
-        break;
-    }
-
-    // Calculate from actual admin data
-    final total = (admin.totalScans * multiplier).round();
-    final issueCount = (admin.diseasesDetected * multiplier).round();
-    final healthyCount = total - issueCount;
+    // Use real health distribution from Appwrite (period filter is visual only)
+    final healthyCount = admin.healthyPlants;
+    final issueCount = admin.diseasedPlants + admin.deadPlants;
+    final total = healthyCount + issueCount;
     final healthyPercent = total > 0 ? (healthyCount / total * 100) : 0.0;
     final issuePercent = total > 0 ? (issueCount / total * 100) : 0.0;
 
@@ -1724,13 +1798,91 @@ class _CustomNotificationSenderPageState
                 onPressed: _canSend()
                     ? () async {
                         setState(() => _isSending = true);
-                        await Future.delayed(const Duration(seconds: 2));
+                        final db = DatabaseService();
+                        final auth =
+                            Provider.of<AuthController>(context, listen: false);
+                        final adminId = auth.userId ?? 'admin';
+                        final title = _titleController.text.trim();
+                        final body = _messageController.text.trim();
+                        final memberIds = <String>{};
+                        try {
+                          switch (_notificationType) {
+                            case 'community':
+                              if (_allCommunities) {
+                                for (var c in admin.communities) {
+                                  for (var m in c.members) {
+                                    if (m.id.isNotEmpty) memberIds.add(m.id);
+                                  }
+                                }
+                              } else if (_selectedCommunity != null) {
+                                final c = admin.communities.firstWhere(
+                                    (c) => c.name == _selectedCommunity,
+                                    orElse: () => admin.communities.first);
+                                for (var m in c.members) {
+                                  if (m.id.isNotEmpty) memberIds.add(m.id);
+                                }
+                              }
+                              break;
+                            case 'plantType':
+                              for (var community in admin.communities) {
+                                if (!_allCommunities &&
+                                    community.name != _selectedCommunity) {
+                                  continue;
+                                }
+                                for (var member in community.members) {
+                                  if (member.stats.any(
+                                      (s) => s.type == _selectedPlantType)) {
+                                    if (member.id.isNotEmpty) {
+                                      memberIds.add(member.id);
+                                    }
+                                  }
+                                }
+                              }
+                              break;
+                            case 'disease':
+                              for (var community in admin.communities) {
+                                for (var member in community.members) {
+                                  if (member.stats.any((s) =>
+                                      s.action == 'Health Scan' ||
+                                      s.action == 'Disease Detection')) {
+                                    if (member.id.isNotEmpty) {
+                                      memberIds.add(member.id);
+                                    }
+                                  }
+                                }
+                              }
+                              break;
+                          }
+                          if (memberIds.isNotEmpty) {
+                            for (final uid in memberIds) {
+                              await db.createNotification(
+                                recipientId: uid,
+                                senderId: adminId,
+                                type: _notificationType == 'disease'
+                                    ? 'disease'
+                                    : 'system',
+                                title: title,
+                                body: body,
+                              );
+                            }
+                          } else {
+                            await db.createNotification(
+                              recipientId: 'all',
+                              senderId: adminId,
+                              type: 'system',
+                              title: title,
+                              body: body,
+                            );
+                          }
+                        } catch (e) {
+                          debugPrint('[CustomNotify] error: \$e');
+                        }
                         setState(() => _isSending = false);
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                'Notification sent to ${_calculateRecipients(admin)} users!',
+                                'Notification sent to ${memberIds.isEmpty ? "all users" : "${_calculateRecipients(admin)} users"}!',
                               ),
                               backgroundColor: const Color(0xFF6366F1),
                             ),
@@ -1904,6 +2056,7 @@ Widget _buildHeroStats(BuildContext context,
   );
 }
 
+// ignore: unused_element
 Widget _buildCategoryRow(
     BuildContext context, String label, String value, Color color) {
   final cs = Theme.of(context).colorScheme;
@@ -1932,6 +2085,7 @@ Widget _buildCategoryRow(
   );
 }
 
+// ignore: unused_element
 Widget _buildSectionHeader(BuildContext context, String title) {
   final cs = Theme.of(context).colorScheme;
   return Padding(

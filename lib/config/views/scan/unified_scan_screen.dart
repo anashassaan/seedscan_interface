@@ -1254,8 +1254,9 @@ class _UnifiedCommunityQRDialogState extends State<_UnifiedCommunityQRDialog> {
 
       // 4. Create plant record in Appwrite using a unique ID (not widget.qrId)
       //    to avoid document collisions with admin QR records.
+      String createdPlantId = widget.qrId; // fallback
       try {
-        await _db.createPlant(
+        final createdPlant = await _db.createPlant(
           species: widget.plantName,
           guardianId: userId,
           lat: lat,
@@ -1265,6 +1266,7 @@ class _UnifiedCommunityQRDialogState extends State<_UnifiedCommunityQRDialog> {
           driveId: widget.communityId, // link plant to community
           // No plantId → Appwrite auto-generates a unique ID
         );
+        createdPlantId = createdPlant.id;
 
         // Keep community stats in sync
         try {
@@ -1276,11 +1278,11 @@ class _UnifiedCommunityQRDialogState extends State<_UnifiedCommunityQRDialog> {
         debugPrint('Plant creation failed: $e');
       }
 
-      // 5. Create activity log
+      // 5. Create activity log — use the plant's Appwrite $id so admin history works
       try {
         await _db.createActivityLog(
           userId: userId,
-          plantId: widget.qrId,
+          plantId: createdPlantId,
           actionType: 'register',
           coinsAwarded: 10,
           verificationStatus: 'verified',

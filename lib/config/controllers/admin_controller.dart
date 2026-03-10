@@ -60,6 +60,7 @@ class AppUser {
   String role;
   final List<PlantStat> stats;
   final int walletBalance;
+  final DateTime createdAt;
 
   AppUser({
     this.id = '',
@@ -68,7 +69,8 @@ class AppUser {
     this.role = 'User',
     this.stats = const [],
     this.walletBalance = 0,
-  });
+    DateTime? createdAt,
+  }) : createdAt = createdAt ?? DateTime.now();
 
   /// Create from Appwrite UserModel + optional role from CommunityMember.
   factory AppUser.fromUserModel(UserModel user,
@@ -80,6 +82,7 @@ class AppUser {
       role: role,
       stats: stats,
       walletBalance: user.walletBalance,
+      createdAt: user.createdAt,
     );
   }
 
@@ -240,6 +243,7 @@ class AdminController extends ChangeNotifier {
 
   // ── Local state (populated from Appwrite) ──────────────────────────────────
   List<AdminCommunity> _communities = [];
+  Map<String, int> _plantHealth = {};
   bool _isInitialized = false;
   bool _useLocalFallback = false; // true when Appwrite is unreachable
   String _serverStatus = "Online";
@@ -248,6 +252,11 @@ class AdminController extends ChangeNotifier {
 
   // ── Getters ────────────────────────────────────────────────────────────────
   List<AdminCommunity> get communities => _communities;
+  Map<String, int> get plantHealth => _plantHealth;
+  int get healthyPlants => _plantHealth['healthy'] ?? 0;
+  int get diseasedPlants =>
+      (_plantHealth['diseased'] ?? 0) + (_plantHealth['critical'] ?? 0);
+  int get deadPlants => _plantHealth['dead'] ?? 0;
   bool get isInitialized => _isInitialized;
   String get serverStatus => _serverStatus;
   bool get isLoading => _isLoading;
@@ -325,6 +334,22 @@ class AdminController extends ChangeNotifier {
         }
       }
       result[community.name] = communityScans;
+    }
+    return result;
+  }
+
+  /// All planting stats across every community member, with their dates.
+  /// Used to build the Scan Trends chart bucketed by period.
+  List<PlantStat> get allPlantingStats {
+    final result = <PlantStat>[];
+    for (final community in _communities) {
+      for (final member in community.members) {
+        for (final stat in member.stats) {
+          if (stat.action == 'Planting') {
+            result.add(stat);
+          }
+        }
+      }
     }
     return result;
   }
@@ -423,7 +448,10 @@ class AdminController extends ChangeNotifier {
 
     _communities = adminCommunities;
 
-    // 5. Load QR codes for each community
+    // 5. Load plant health distribution
+    _plantHealth = await _adminDb.getPlantHealthDistribution();
+
+    // 6. Load QR codes for each community
     _communityQrCodes.clear();
     for (int i = 0; i < _communities.length; i++) {
       final qrDocs = await _adminDb.listAdminQrCodes(_communities[i].id);
@@ -457,6 +485,51 @@ class AdminController extends ChangeNotifier {
     } catch (e) {
       debugPrint(
           'AdminController: Failed to fetch plants for user $userId: $e');
+      return [];
+    }
+  }
+
+  /// Get plants planted by a user within a specific community (drive_id == communityId).
+  ///
+  /// Uses a 3-tier strategy to handle missing Appwrite indexes gracefully:
+  ///  1. Single-attribute query by guardian_id (needs guardian_id index).
+  ///  2. Full-collection scan limited to 500 most-recent docs (no index needed).
+  ///  3. Return empty list with a debugPrint if all else fails.
+  ///
+  /// In both successful tiers the result is further filtered client-side by
+  /// communityId so we never depend on a compound query.
+  Future<List<PlantModel>> getCommunityMemberPlants(
+      String userId, String communityId) async {
+    final dbService = DatabaseService();
+
+    // ── Tier 1: indexed single-attribute query ─────────────────────────────
+    try {
+      final all = await dbService.listMyPlants(userId);
+      debugPrint(
+          'AdminController: Tier-1 query returned ${all.length} plants for $userId');
+      if (all.isNotEmpty) {
+        final filtered = all.where((p) => p.driveId == communityId).toList();
+        // Return community-filtered results; fall back to ALL user plants if
+        // none match the community (e.g. legacy plants without drive_id).
+        return filtered.isNotEmpty ? filtered : all;
+      }
+    } catch (e) {
+      debugPrint('AdminController: Tier-1 query failed ($e) — trying Tier-2');
+    }
+
+    // ── Tier 2: scan-all (no index required) ──────────────────────────────
+    try {
+      final all = await dbService.listPlants(queries: [
+        Query.limit(500),
+        Query.orderDesc('\$createdAt'),
+      ]);
+      debugPrint(
+          'AdminController: Tier-2 scan returned ${all.length} total plants');
+      final byUser = all.where((p) => p.guardianId == userId).toList();
+      final filtered = byUser.where((p) => p.driveId == communityId).toList();
+      return filtered.isNotEmpty ? filtered : byUser;
+    } catch (e) {
+      debugPrint('AdminController: Tier-2 scan also failed: $e');
       return [];
     }
   }
@@ -556,6 +629,36 @@ class AdminController extends ChangeNotifier {
       _errorMessage = 'Failed to create community: $msg';
       _isLoading = false;
       notifyListeners();
+      return false;
+    }
+  }
+
+  /// Update a community's profile image, persisted to Appwrite.
+  Future<bool> updateCommunityImage(int communityIndex, String filePath) async {
+    if (communityIndex < 0 || communityIndex >= _communities.length) {
+      return false;
+    }
+
+    try {
+      final community = _communities[communityIndex];
+      final imageUrl = await _adminDb.uploadCommunityImage(filePath);
+      if (imageUrl == null) return false;
+
+      final updated = await _adminDb.updateCommunity(
+        community.id,
+        {'image_url': imageUrl},
+      );
+      if (updated == null) return false;
+
+      _communities[communityIndex] = AdminCommunity.fromCommunity(
+        updated,
+        members: community.members,
+        creatorName: community.createdBy,
+      );
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('AdminController: Failed to update community image: $e');
       return false;
     }
   }

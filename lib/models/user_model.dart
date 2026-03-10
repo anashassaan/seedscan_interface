@@ -35,12 +35,12 @@ class UserModel {
       role: json['role'] ?? 'user',
       walletBalance: json['wallet_balance'] ?? 0,
       currentStreak: json['current_streak'] ?? 0,
-      joinedDrives: List<String>.from(json['joined_drives'] ?? []),
-      createdAt: DateTime.parse(
-        json['created_at'] ??
-            json['\$createdAt'] ??
-            DateTime.now().toIso8601String(),
-      ),
+      joinedDrives:
+          (json['joined_drives'] as List? ?? []).whereType<String>().toList(),
+      createdAt: DateTime.tryParse(
+            json['created_at'] ?? json['\$createdAt'] ?? '',
+          ) ??
+          DateTime.now(),
     );
   }
 

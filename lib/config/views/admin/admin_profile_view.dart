@@ -966,6 +966,7 @@ class _AdminProfileViewState extends State<AdminProfileView>
   }
 
   // Activity metric card
+  // ignore: unused_element
   Widget _activityMetric(
     ColorScheme cs, {
     required IconData icon,
@@ -1010,6 +1011,7 @@ class _AdminProfileViewState extends State<AdminProfileView>
   }
 
   // Activity item
+  // ignore: unused_element
   Widget _activityItem(
     ColorScheme cs, {
     required IconData icon,
@@ -1216,7 +1218,6 @@ class _AdminProfileViewState extends State<AdminProfileView>
   }
 
   void _showSignOutDialog() {
-    final cs = Theme.of(context).colorScheme;
     final auth = Provider.of<AuthController>(context, listen: false);
     showDialog(
       context: context,
@@ -1245,7 +1246,6 @@ class _AdminProfileViewState extends State<AdminProfileView>
   }
 
   void _showDeactivateDialog() {
-    final cs = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(

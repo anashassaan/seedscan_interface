@@ -1,8 +1,11 @@
 // lib/main.dart
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'config/controllers/theme_controller.dart';
 import 'config/controllers/notification_controller.dart';
+import 'services/push_notification_service.dart';
 import 'config/controllers/admin_controller.dart';
 import 'config/theme.dart';
 import 'config/controllers/auth_controller.dart';
@@ -11,13 +14,40 @@ import 'config/controllers/chat_controller.dart';
 import 'config/controllers/wallet_controller.dart';
 import 'config/controllers/community_controller.dart';
 import 'services/appwrite_service.dart';
+import 'services/garden_cache_service.dart';
 
 import 'config/views/auth/login_view.dart';
 import 'config/views/main/main_navigation.dart';
 import 'config/views/admin/admin_dashboard_view.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Catch uncaught errors from the root zone (e.g. Appwrite Realtime SDK
+  // throwing _TypeError when it receives null-payload WebSocket frames).
+  // Returning true marks the error as handled so Flutter does not crash.
+  PlatformDispatcher.instance.onError = (error, stack) {
+    if (error is TypeError) {
+      debugPrint('[RootZone] Suppressed TypeError: $error');
+      return true;
+    }
+    if (error is FormatException) {
+      debugPrint('[RootZone] Suppressed FormatException: $error');
+      return true;
+    }
+    if (error is RangeError) {
+      debugPrint('[RootZone] Suppressed RangeError: $error');
+      return true;
+    }
+    return false;
+  };
+
+  // Initialize Hive (local cache)
+  await Hive.initFlutter();
+  await GardenCacheService.initialize();
+
+  // Initialize local notifications (permission request + channel setup)
+  await PushNotificationService().initLocalNotifications();
 
   // Initialize Appwrite before anything else
   final appwrite = AppwriteService();
@@ -89,11 +119,14 @@ class _EntryDeciderState extends State<EntryDecider> {
       final communityCtrl =
           Provider.of<CommunityController>(context, listen: false);
       final scanCtrl = Provider.of<ScanController>(context, listen: false);
+      final notifCtrl =
+          Provider.of<NotificationController>(context, listen: false);
       final uid = auth.userId ?? '';
-      // Fire both loads concurrently
+      // Fire loads concurrently
       await Future.wait([
         communityCtrl.loadUserCommunities(uid),
         scanCtrl.loadMyPlants(uid),
+        notifCtrl.initialize(uid),
       ]);
     }
 

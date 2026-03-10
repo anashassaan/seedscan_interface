@@ -1,121 +1,83 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show ChangeNotifier;
+import '../../services/push_notification_service.dart';
+import '../../services/database_service.dart';
 
 class NotificationController extends ChangeNotifier {
-  final List<NotificationModel> _notifications = [
-    NotificationModel(
-      id: 'n1',
-      type: NotificationType.watering,
-      title: 'Watering Reminder',
-      message: 'Golden Pothos needs watering',
-      plantName: 'Golden Pothos',
-      location: 'Central Park - Manhattan, NY',
-      latitude: 40.7829,
-      longitude: -73.9654,
-      timestamp: DateTime.now().subtract(const Duration(minutes: 5)),
-      isRead: false,
-    ),
-    NotificationModel(
-      id: 'n2',
-      type: NotificationType.health,
-      title: 'Health Check Required',
-      message: 'Fiddle Leaf Fig showing yellow leaves',
-      plantName: 'Fiddle Leaf Fig',
-      location: 'Tower Bridge - London, UK',
-      latitude: 51.5055,
-      longitude: -0.0754,
-      timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-      isRead: false,
-    ),
-    NotificationModel(
-      id: 'n3',
-      type: NotificationType.fertilizer,
-      title: 'Fertilizer Due',
-      message: 'Mango Tree scheduled for fertilization',
-      plantName: 'Mango Tree',
-      location: 'Shibuya Crossing - Tokyo, Japan',
-      latitude: 35.6595,
-      longitude: 139.7004,
-      timestamp: DateTime.now().subtract(const Duration(hours: 5)),
-      isRead: false,
-    ),
-    NotificationModel(
-      id: 'n4',
-      type: NotificationType.pest,
-      title: 'Pest Alert',
-      message: 'Possible aphid infestation detected on Rose Garden',
-      plantName: 'Rose Garden',
-      location: 'Sydney Opera House - Australia',
-      latitude: -33.8568,
-      longitude: 151.2153,
-      timestamp: DateTime.now().subtract(const Duration(days: 1)),
-      isRead: false,
-    ),
-    NotificationModel(
-      id: 'n5',
-      type: NotificationType.pruning,
-      title: 'Pruning Needed',
-      message: 'Neem Tree requires pruning for optimal growth',
-      plantName: 'Neem Tree',
-      location: 'Eiffel Tower - Paris, France',
-      latitude: 48.8584,
-      longitude: 2.2945,
-      timestamp: DateTime.now().subtract(const Duration(days: 2)),
-      isRead: true,
-    ),
-    NotificationModel(
-      id: 'n6',
-      type: NotificationType.repotting,
-      title: 'Repotting Required',
-      message: 'Monstera Deliciosa has outgrown its pot',
-      plantName: 'Monstera Deliciosa',
-      location: 'Marina Bay - Singapore',
-      latitude: 1.2864,
-      longitude: 103.8547,
-      timestamp: DateTime.now().subtract(const Duration(days: 3)),
-      isRead: false,
-    ),
-    NotificationModel(
-      id: 'n7',
-      type: NotificationType.success,
-      title: 'Growth Milestone',
-      message: 'Peace Lily has grown 2 inches this month!',
-      plantName: 'Peace Lily',
-      location: 'Burj Khalifa - Dubai, UAE',
-      latitude: 25.1972,
-      longitude: 55.2744,
-      timestamp: DateTime.now().subtract(const Duration(days: 4)),
-      isRead: true,
-    ),
-    NotificationModel(
-      id: 'n8',
-      type: NotificationType.disease,
-      title: 'Disease Detection',
-      message: 'Potential fungal infection on Tomato Plant leaves',
-      plantName: 'Tomato Plant',
-      location: 'Christ the Redeemer - Rio, Brazil',
-      latitude: -22.9519,
-      longitude: -43.2105,
-      timestamp: DateTime.now().subtract(const Duration(days: 5)),
-      isRead: false,
-    ),
-  ];
+  final List<NotificationModel> _notifications = [];
+  final DatabaseService _db = DatabaseService();
+  bool _loading = false;
+  String? _currentUserId;
 
   List<NotificationModel> get notifications => _notifications;
-
   int get unreadCount => _notifications.where((n) => !n.isRead).length;
+  bool get loading => _loading;
 
+  // ── Initialize: load from Appwrite + subscribe to realtime ────────────────
+  Future<void> initialize(String userId) async {
+    if (_currentUserId == userId) return; // already initialized for this user
+    _currentUserId = userId;
+
+    // Initialize local notifications
+    await PushNotificationService().initLocalNotifications();
+
+    // Load existing notifications from Appwrite
+    await _loadFromAppwrite(userId);
+
+    // Subscribe to real-time new notifications
+    await PushNotificationService().subscribe(
+      userId: userId,
+      onNotification: (data) {
+        final existing =
+            _notifications.any((n) => n.id == (data['\$id'] ?? ''));
+        if (!existing) {
+          final model = _fromAppwriteData(data);
+          _notifications.insert(0, model);
+          notifyListeners();
+        }
+      },
+    );
+  }
+
+  /// Detach realtime listener on logout
+  Future<void> dispose2() async {
+    await PushNotificationService().unsubscribe();
+    _currentUserId = null;
+    _notifications.clear();
+  }
+
+  Future<void> _loadFromAppwrite(String userId) async {
+    _loading = true;
+    notifyListeners();
+    try {
+      final list = await _db.listNotifications(userId);
+      _notifications.clear();
+      _notifications.addAll(list.map(_fromAppwriteNotificationModel).toList());
+    } catch (e) {
+      debugPrint('[NotificationController] _loadFromAppwrite error: $e');
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  // ── Public API (used by view) ─────────────────────────────────────────────
   void markAllAsRead() {
     for (var n in _notifications) {
-      n.isRead = true;
+      if (!n.isRead) {
+        n.isRead = true;
+        _markReadOnServer(n.id);
+      }
     }
     notifyListeners();
   }
 
   void markAsRead(String id) {
     final index = _notifications.indexWhere((n) => n.id == id);
-    if (index != -1) {
+    if (index != -1 && !_notifications[index].isRead) {
       _notifications[index].isRead = true;
       notifyListeners();
+      _markReadOnServer(id);
     }
   }
 
@@ -127,6 +89,68 @@ class NotificationController extends ChangeNotifier {
   void addNotification(NotificationModel notification) {
     _notifications.insert(0, notification);
     notifyListeners();
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  void _markReadOnServer(String id) {
+    _db.markNotificationRead(id).catchError(
+        (e) => debugPrint('[NotificationController] markRead error: $e'));
+  }
+
+  NotificationType _typeFromString(String? type) {
+    switch (type) {
+      case 'watering':
+        return NotificationType.watering;
+      case 'disease':
+        return NotificationType.disease;
+      case 'health':
+        return NotificationType.health;
+      case 'fertilizer':
+        return NotificationType.fertilizer;
+      case 'pest':
+        return NotificationType.pest;
+      case 'pruning':
+        return NotificationType.pruning;
+      case 'repotting':
+        return NotificationType.repotting;
+      case 'success':
+        return NotificationType.success;
+      default:
+        return NotificationType.reminder;
+    }
+  }
+
+  NotificationModel _fromAppwriteNotificationModel(dynamic m) {
+    // m is a NotificationModel from models/notification_model.dart
+    return NotificationModel(
+      id: m.id,
+      type: _typeFromString(m.type),
+      title: m.title,
+      message: m.body,
+      plantName: m.plantName ?? 'SeedScan',
+      location: m.plantLocation ?? '',
+      latitude: 0.0,
+      longitude: 0.0,
+      timestamp: m.createdAt,
+      isRead: m.isRead,
+    );
+  }
+
+  NotificationModel _fromAppwriteData(Map<String, dynamic> data) {
+    return NotificationModel(
+      id: data['\$id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      type: _typeFromString(data['type']),
+      title: data['title'] ?? 'SeedScan',
+      message: data['body'] ?? '',
+      plantName: data['plant_name'] ?? 'SeedScan',
+      location: data['plant_location'] ?? '',
+      latitude: 0.0,
+      longitude: 0.0,
+      timestamp: data['created_at'] != null
+          ? DateTime.tryParse(data['created_at']) ?? DateTime.now()
+          : DateTime.now(),
+      isRead: data['is_read'] ?? false,
+    );
   }
 }
 

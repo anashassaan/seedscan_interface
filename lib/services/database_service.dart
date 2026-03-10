@@ -1,5 +1,4 @@
 // lib/services/database_service.dart
-import 'dart:convert';
 import 'package:appwrite/appwrite.dart';
 import 'package:flutter/foundation.dart';
 import '../config/appwrite_constants.dart';
@@ -69,13 +68,18 @@ class DatabaseService {
   }
 
   Future<List<UserModel>> listUsers({List<String>? queries}) async {
-    final res = await _appwrite.getDocuments(
-      collectionId: AppwriteConstants.usersCollection,
-      queries: queries,
-    );
-    return (res.documents as List)
-        .map((d) => UserModel.fromJson(d.data))
-        .toList();
+    try {
+      final res = await _appwrite.getDocuments(
+        collectionId: AppwriteConstants.usersCollection,
+        queries: queries,
+      );
+      return (res.documents as List)
+          .map((d) => UserModel.fromJson(d.data))
+          .toList();
+    } catch (e) {
+      debugPrint('DB: listUsers failed: $e');
+      return [];
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -105,7 +109,7 @@ class DatabaseService {
         'health_status': 'healthy',
         'image_url': imageUrl,
         'last_watered': null,
-        'pHash_history': <String>[],
+        'phash_history': <String>[],
       },
     );
     return PlantModel.fromJson(doc.data);
@@ -124,13 +128,18 @@ class DatabaseService {
   }
 
   Future<List<PlantModel>> listPlants({List<String>? queries}) async {
-    final res = await _appwrite.getDocuments(
-      collectionId: AppwriteConstants.plantsCollection,
-      queries: queries,
-    );
-    return (res.documents as List)
-        .map((d) => PlantModel.fromJson(d.data))
-        .toList();
+    try {
+      final res = await _appwrite.getDocuments(
+        collectionId: AppwriteConstants.plantsCollection,
+        queries: queries,
+      );
+      return (res.documents as List)
+          .map((d) => PlantModel.fromJson(d.data))
+          .toList();
+    } catch (e) {
+      debugPrint('DB: listPlants failed: $e');
+      return [];
+    }
   }
 
   /// List plants belonging to a specific guardian (user).
@@ -218,20 +227,28 @@ class DatabaseService {
         'coins_awarded': coinsAwarded,
         'verification_status': verificationStatus,
         'proof_image_id': proofImageId,
-        'rejection_reason': rejectionReason,
+        // Always supply created_at — Appwrite schema requires this attribute.
+        'created_at': DateTime.now().toIso8601String(),
+        // Appwrite rejects null for string attributes; fall back to empty string.
+        'rejection_reason': rejectionReason ?? '',
       },
     );
     return ActivityLog.fromJson(doc.data);
   }
 
   Future<List<ActivityLog>> listActivityLogs({List<String>? queries}) async {
-    final res = await _appwrite.getDocuments(
-      collectionId: AppwriteConstants.activityLogsCollection,
-      queries: queries,
-    );
-    return (res.documents as List)
-        .map((d) => ActivityLog.fromJson(d.data))
-        .toList();
+    try {
+      final res = await _appwrite.getDocuments(
+        collectionId: AppwriteConstants.activityLogsCollection,
+        queries: queries,
+      );
+      return (res.documents as List)
+          .map((d) => ActivityLog.fromJson(d.data))
+          .toList();
+    } catch (e) {
+      debugPrint('DB: listActivityLogs failed: $e');
+      return [];
+    }
   }
 
   /// Logs for a specific user.
@@ -478,18 +495,23 @@ class DatabaseService {
 
   Future<List<CommunityPost>> listPosts(String communityId,
       {List<String>? queries}) async {
-    final q = <String>[
-      Query.equal('community_id', communityId),
-      Query.orderDesc('created_at'),
-      ...(queries ?? []),
-    ];
-    final res = await _appwrite.getDocuments(
-      collectionId: AppwriteConstants.communityPostsCollection,
-      queries: q,
-    );
-    return (res.documents as List)
-        .map((d) => CommunityPost.fromJson(d.data))
-        .toList();
+    try {
+      final q = <String>[
+        Query.equal('community_id', communityId),
+        Query.orderDesc('created_at'),
+        ...(queries ?? []),
+      ];
+      final res = await _appwrite.getDocuments(
+        collectionId: AppwriteConstants.communityPostsCollection,
+        queries: q,
+      );
+      return (res.documents as List)
+          .map((d) => CommunityPost.fromJson(d.data))
+          .toList();
+    } catch (e) {
+      debugPrint('DB: listPosts failed: $e');
+      return [];
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -516,16 +538,21 @@ class DatabaseService {
   }
 
   Future<List<CommunityComment>> listComments(String postId) async {
-    final res = await _appwrite.getDocuments(
-      collectionId: AppwriteConstants.communityCommentsCollection,
-      queries: [
-        Query.equal('post_id', postId),
-        Query.orderAsc('created_at'),
-      ],
-    );
-    return (res.documents as List)
-        .map((d) => CommunityComment.fromJson(d.data))
-        .toList();
+    try {
+      final res = await _appwrite.getDocuments(
+        collectionId: AppwriteConstants.communityCommentsCollection,
+        queries: [
+          Query.equal('post_id', postId),
+          Query.orderAsc('created_at'),
+        ],
+      );
+      return (res.documents as List)
+          .map((d) => CommunityComment.fromJson(d.data))
+          .toList();
+    } catch (e) {
+      debugPrint('DB: listComments failed: $e');
+      return [];
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -615,20 +642,46 @@ class DatabaseService {
   /// Inbox: unread first, newest first.
   Future<List<NotificationModel>> listNotifications(String userId,
       {bool unreadOnly = false}) async {
-    final queries = <String>[
+    // Fetch notifications addressed to this specific user
+    final userQueries = <String>[
       Query.equal('recipient_id', userId),
       Query.orderDesc('created_at'),
+      Query.limit(50),
     ];
-    if (unreadOnly) {
-      queries.add(Query.equal('is_read', false));
-    }
-    final res = await _appwrite.getDocuments(
-      collectionId: AppwriteConstants.notificationsCollection,
-      queries: queries,
-    );
-    return (res.documents as List)
-        .map((d) => NotificationModel.fromJson(d.data))
-        .toList();
+    if (unreadOnly) userQueries.add(Query.equal('is_read', false));
+
+    // Fetch broadcast notifications ('all')
+    final broadcastQueries = <String>[
+      Query.equal('recipient_id', 'all'),
+      Query.orderDesc('created_at'),
+      Query.limit(50),
+    ];
+    if (unreadOnly) broadcastQueries.add(Query.equal('is_read', false));
+
+    final results = await Future.wait([
+      _appwrite.getDocuments(
+        collectionId: AppwriteConstants.notificationsCollection,
+        queries: userQueries,
+      ),
+      _appwrite.getDocuments(
+        collectionId: AppwriteConstants.notificationsCollection,
+        queries: broadcastQueries,
+      ),
+    ]);
+
+    final all = [
+      ...results[0].documents,
+      ...results[1].documents,
+    ];
+    // De-duplicate and sort newest first
+    final seen = <String>{};
+    final unique = all.where((d) => seen.add(d.$id)).toList();
+    unique.sort((a, b) {
+      final ta = a.data['created_at'] ?? '';
+      final tb = b.data['created_at'] ?? '';
+      return tb.compareTo(ta);
+    });
+    return unique.map((d) => NotificationModel.fromJson(d.data)).toList();
   }
 
   Future<void> markNotificationRead(String notificationId) async {
@@ -706,14 +759,6 @@ class DatabaseService {
     DateTime? plantedAt,
   }) async {
     final now = DateTime.now();
-    final List<String> imageHistory = [];
-    if (imageFileId != null && imageUrl != null) {
-      imageHistory.add(jsonEncode({
-        'file_id': imageFileId,
-        'url': imageUrl,
-        'updated_at': (plantedAt ?? now).toIso8601String(),
-      }));
-    }
     final doc = await _appwrite.createDocument(
       collectionId: AppwriteConstants.myGardenQrCollection,
       data: {
@@ -735,8 +780,8 @@ class DatabaseService {
         'location_long': locationLong,
         'image_file_id': imageFileId,
         'image_url': imageUrl,
-        'planted_at': (plantedAt ?? now).toIso8601String(),
-        'image_history': imageHistory,
+        // planted_at is null when the QR is only generated (not yet scanned+planted)
+        'planted_at': plantedAt?.toIso8601String(),
       },
     );
     return MyGardenQRModel.fromJson(doc.data);
@@ -757,16 +802,72 @@ class DatabaseService {
 
   /// List all My Garden QR codes for a given user.
   Future<List<MyGardenQRModel>> listMyGardenQRCodes(String userId) async {
-    final res = await _appwrite.getDocuments(
-      collectionId: AppwriteConstants.myGardenQrCollection,
-      queries: [
-        Query.equal('owner_id', userId),
-        Query.orderDesc('created_at'),
-      ],
-    );
-    return (res.documents as List)
-        .map((d) => MyGardenQRModel.fromJson(d.data))
-        .toList();
+    try {
+      final res = await _appwrite.getDocuments(
+        collectionId: AppwriteConstants.myGardenQrCollection,
+        queries: [
+          Query.equal('owner_id', userId),
+          Query.orderDesc('created_at'),
+        ],
+      );
+      return (res.documents as List)
+          .map((d) => MyGardenQRModel.fromJson(d.data))
+          .toList();
+    } catch (e) {
+      debugPrint('DB: listMyGardenQRCodes failed: $e');
+      return [];
+    }
+  }
+
+  /// Fetch all planted QR codes for every member of [communityId] and return
+  /// them as [CommunityPlant] objects for the community plants view.
+  Future<List<CommunityPlant>> getCommunityMemberPlants(
+      String communityId) async {
+    // Query the plants collection by drive_id == communityId.
+    // Community QR scans always call createPlant(driveId: communityId),
+    // so this is the correct source of truth for community-specific plants.
+    try {
+      final res = await _appwrite.getDocuments(
+        collectionId: AppwriteConstants.plantsCollection,
+        queries: [
+          Query.equal('drive_id', communityId),
+          Query.orderDesc('\$createdAt'),
+          Query.limit(500),
+        ],
+      );
+
+      return (res.documents as List).map((d) {
+        final plant = PlantModel.fromJson(d.data);
+        final healthStatus = plant.healthStatus.toLowerCase();
+        final status = healthStatus == 'diseased' || healthStatus == 'critical'
+            ? 'Needs Attention'
+            : healthStatus == 'dead'
+                ? 'Dead'
+                : 'Healthy';
+        return CommunityPlant(
+          id: plant.id,
+          communityId: communityId,
+          plantName: plant.species.isNotEmpty ? plant.species : 'Plant',
+          scientificName: plant.nickname ?? '',
+          plantedBy: plant.guardianId,
+          plantedByUsername: '',
+          location: plant.locationLat != 0.0
+              ? 'GPS: ${plant.locationLat.toStringAsFixed(4)}, ${plant.locationLong.toStringAsFixed(4)}'
+              : 'Location not available',
+          latitude: plant.locationLat != 0.0 ? plant.locationLat : null,
+          longitude: plant.locationLong != 0.0 ? plant.locationLong : null,
+          imageUrl: plant.imageUrl.isNotEmpty ? plant.imageUrl : null,
+          plantedDate:
+              DateTime.tryParse(d.data['\$createdAt'] ?? '') ?? DateTime.now(),
+          status: status,
+          category: plant.nickname ?? '',
+          description: null,
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('getCommunityMemberPlants: failed ($e)');
+      return [];
+    }
   }
 
   /// Find a My Garden QR code by its unique code (e.g. MYGARDEN-...).
@@ -842,6 +943,32 @@ class DatabaseService {
     );
   }
 
+  /// Update an existing My Garden QR code to formalize planting (adds location/photo without changing ID).
+  Future<MyGardenQRModel> updateMyGardenQRPlantingInfo({
+    required String docId,
+    double locationLat = 0.0,
+    double locationLong = 0.0,
+    String? imageFileId,
+    String? imageUrl,
+    DateTime? plantedAt,
+  }) async {
+    final now = DateTime.now();
+    final dataToUpdate = <String, dynamic>{
+      'location_lat': locationLat,
+      'location_long': locationLong,
+      'planted_at': (plantedAt ?? now).toIso8601String(),
+    };
+    if (imageFileId != null) dataToUpdate['image_file_id'] = imageFileId;
+    if (imageUrl != null) dataToUpdate['image_url'] = imageUrl;
+
+    final doc = await _appwrite.updateDocument(
+      collectionId: AppwriteConstants.myGardenQrCollection,
+      documentId: docId,
+      data: dataToUpdate,
+    );
+    return MyGardenQRModel.fromJson(doc.data);
+  }
+
   /// Delete a My Garden QR code.
   Future<void> deleteMyGardenQR(String docId) async {
     await _appwrite.deleteDocument(
@@ -851,36 +978,35 @@ class DatabaseService {
   }
 
   /// Update a My Garden plant's image in the database (upload + update doc).
-  /// Returns the updated image URL.
+  /// The file is always uploaded to storage; the DB update is best-effort
+  /// (silently ignored if the collection schema lacks the attributes).
+  /// Returns {'fileId': ..., 'url': ..., 'updatedAt': ...}.
   Future<Map<String, String>> updateMyGardenPlantImage({
     required String docId,
     required String filePath,
   }) async {
-    // 1. Upload image to Appwrite storage
+    // 1. Upload image to Appwrite storage bucket (always upload first)
     final fileId = await uploadPlantImage(filePath);
     final url = getPlantImageUrl(fileId);
     final now = DateTime.now().toIso8601String();
 
-    // 2. Get the existing document to append to image_history
-    final existing = await getMyGardenQR(docId);
-    final List<String> history =
-        existing?.imageHistory.map((e) => jsonEncode(e)).toList() ?? [];
-    history.add(jsonEncode({
-      'file_id': fileId,
-      'url': url,
-      'updated_at': now,
-    }));
-
-    // 3. Update the document with new image info
-    await _appwrite.updateDocument(
-      collectionId: AppwriteConstants.myGardenQrCollection,
-      documentId: docId,
-      data: {
-        'image_file_id': fileId,
-        'image_url': url,
-        'image_history': history,
-      },
-    );
+    // 2. Best-effort: update the document with new image info.
+    //    If the Appwrite collection schema doesn't have these attributes yet,
+    //    or if there's a permissions error, we still return the URL so the
+    //    caller can display and cache it locally.
+    try {
+      await _appwrite.updateDocument(
+        collectionId: AppwriteConstants.myGardenQrCollection,
+        documentId: docId,
+        data: {
+          'image_file_id': fileId,
+          'image_url': url,
+        },
+      );
+    } catch (e) {
+      debugPrint('updateMyGardenPlantImage: DB update skipped ($e). '
+          'Image uploaded OK — fileId=$fileId');
+    }
 
     return {'fileId': fileId, 'url': url, 'updatedAt': now};
   }
@@ -968,6 +1094,9 @@ class DatabaseService {
       bucketId: AppwriteConstants.plantImagesBucket,
       filePath: filePath,
       fileId: ID.unique(),
+      permissions: [
+        Permission.read(Role.any()), // Allow everyone to view plant images
+      ],
     );
     return file.$id;
   }

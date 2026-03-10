@@ -47,9 +47,6 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
 
-    // Dynamic titles per tab
-    const titles = ['Dashboard', 'Communities', 'Analytics', 'Profile'];
-
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
@@ -269,9 +266,9 @@ class _HomeTab extends StatelessWidget {
                         Expanded(
                           child: _metricCard(
                             cs,
-                            title: 'Tree Scans',
-                            value: _formatNum(admin.totalScans),
-                            icon: LucideIcons.scan,
+                            title: 'Trees Planted',
+                            value: _formatNum(admin.totalPlants),
+                            icon: LucideIcons.treeDeciduous,
                             color: const Color(0xFF0BA360),
                             onTap: () => Navigator.push(
                                 context,
@@ -330,6 +327,76 @@ class _HomeTab extends StatelessWidget {
                         ),
                       ],
                     ),
+                    // Plant Health card sits directly under Disease Alerts row
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const DiseaseStatsPage())),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: cs.surfaceContainerHighest.withOpacity(0.35),
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(LucideIcons.heartPulse,
+                                    size: 16, color: cs.primary),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Plant Health Status',
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                      color: cs.onSurface),
+                                ),
+                                const Spacer(),
+                                Icon(LucideIcons.chevronRight,
+                                    size: 16,
+                                    color: cs.onSurface.withOpacity(0.4)),
+                              ],
+                            ),
+                            const SizedBox(height: 14),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _healthCard(
+                                    label: 'Healthy',
+                                    value: admin.healthyPlants,
+                                    color: const Color(0xFF0BA360),
+                                    icon: LucideIcons.leaf,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _healthCard(
+                                    label: 'Diseased',
+                                    value: admin.diseasedPlants,
+                                    color: const Color(0xFFE67E22),
+                                    icon: LucideIcons.bug,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _healthCard(
+                                    label: 'Dead',
+                                    value: admin.deadPlants,
+                                    color: const Color(0xFFE53935),
+                                    icon: LucideIcons.skull,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
                     const SizedBox(height: 28),
 
                     // ── Recent Communities ──
@@ -431,6 +498,42 @@ class _HomeTab extends StatelessWidget {
     );
   }
 
+  // ── Health status mini-card ──
+  static Widget _healthCard({
+    required String label,
+    required int value,
+    required Color color,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.30), width: 1.2),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 8),
+          Text(
+            value.toString(),
+            style: TextStyle(
+                fontSize: 22, fontWeight: FontWeight.w800, color: color),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color.withOpacity(0.8)),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── Metric card ──
   static Widget _metricCard(
     ColorScheme cs, {
@@ -481,6 +584,7 @@ class _HomeTab extends StatelessWidget {
   }
 
   // ── Quick action tile ──
+  // ignore: unused_element
   static Widget _quickAction(
     ColorScheme cs, {
     required IconData icon,
@@ -1486,7 +1590,6 @@ class _SettingsTabState extends State<_SettingsTab> {
   }
 
   void _showClearCacheDialog() {
-    final cs = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1523,7 +1626,6 @@ class _SettingsTabState extends State<_SettingsTab> {
   }
 
   void _showMaintenanceConfirm(bool enable) {
-    final cs = Theme.of(context).colorScheme;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(

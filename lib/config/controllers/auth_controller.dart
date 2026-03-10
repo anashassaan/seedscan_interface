@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
 import '../../services/appwrite_service.dart';
+import '../../services/garden_cache_service.dart';
 import '../../models/user_model.dart';
 
 class AuthController extends ChangeNotifier {
@@ -238,6 +239,13 @@ class AuthController extends ChangeNotifier {
       await _appwriteService.signOut();
     } catch (e) {
       debugPrint('Appwrite signout error: $e');
+    }
+
+    // Wipe locally cached garden data so the next user starts clean
+    try {
+      await GardenCacheService.clearAll();
+    } catch (e) {
+      debugPrint('GardenCacheService clearAll error: $e');
     }
 
     _loggedIn = false;

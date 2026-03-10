@@ -65,11 +65,10 @@ class MyGardenQRModel {
       ownerEmail: json['owner_email'] ?? '',
       gardenId: json['garden_id'] ?? '',
       source: json['source'] ?? 'my_garden',
-      createdAt: DateTime.parse(
-        json['created_at'] ??
-            json['\$createdAt'] ??
-            DateTime.now().toIso8601String(),
-      ),
+      createdAt: DateTime.tryParse(
+            json['created_at'] ?? json['\$createdAt'] ?? '',
+          ) ??
+          DateTime.now(),
       locationLat: (json['location_lat'] ?? 0.0).toDouble(),
       locationLong: (json['location_long'] ?? 0.0).toDouble(),
       imageFileId: json['image_file_id'],
@@ -78,15 +77,24 @@ class MyGardenQRModel {
           ? DateTime.tryParse(json['planted_at'].toString())
           : null,
       imageHistory: json['image_history'] != null
-          ? (json['image_history'] as List).map((e) {
-              if (e is String) {
-                // Stored as JSON-encoded strings in Appwrite string array
-                return Map<String, dynamic>.from(jsonDecode(e));
-              } else if (e is Map) {
-                return Map<String, dynamic>.from(e);
-              }
-              return <String, dynamic>{};
-            }).toList()
+          ? (json['image_history'] as List)
+              .map((e) {
+                if (e is String) {
+                  // Stored as JSON-encoded strings in Appwrite string array
+                  try {
+                    final decoded = jsonDecode(e);
+                    if (decoded is Map) {
+                      return Map<String, dynamic>.from(decoded);
+                    }
+                  } catch (_) {}
+                  return <String, dynamic>{};
+                } else if (e is Map) {
+                  return Map<String, dynamic>.from(e);
+                }
+                return <String, dynamic>{};
+              })
+              .where((m) => m.isNotEmpty)
+              .toList()
           : [],
     );
   }
@@ -112,7 +120,7 @@ class MyGardenQRModel {
       'image_file_id': imageFileId,
       'image_url': imageUrl,
       'planted_at': plantedAt?.toIso8601String(),
-      'image_history': imageHistory.map((e) => jsonEncode(e)).toList(),
+      // 'image_history': imageHistory.map((e) => jsonEncode(e)).toList(),
     };
   }
 

@@ -1,6 +1,7 @@
 // lib/views/common/plant_card.dart
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../appwrite_constants.dart';
 
 class PlantCard extends StatelessWidget {
   final String imageUrl;
@@ -68,6 +69,9 @@ class PlantCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
               child: Image.network(
                 imageUrl,
+                headers: const {
+                  'X-Appwrite-Project': AppwriteConstants.projectId
+                },
                 width: 72,
                 height: 72,
                 fit: BoxFit.cover,

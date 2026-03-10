@@ -40,9 +40,12 @@ class PlantModel {
       healthStatus: json['health_status'] ?? 'healthy',
       imageUrl: json['image_url'] ?? '',
       lastWatered: json['last_watered'] != null
-          ? DateTime.parse(json['last_watered'])
+          ? DateTime.tryParse(json['last_watered'].toString())
           : null,
-      pHashHistory: List<String>.from(json['pHash_history'] ?? []),
+      pHashHistory:
+          ((json['phash_history'] ?? json['pHash_history']) as List? ?? [])
+              .whereType<String>()
+              .toList(),
     );
   }
 
@@ -57,7 +60,7 @@ class PlantModel {
       'health_status': healthStatus,
       'image_url': imageUrl,
       'last_watered': lastWatered?.toIso8601String(),
-      'pHash_history': pHashHistory,
+      'phash_history': pHashHistory,
     };
   }
 

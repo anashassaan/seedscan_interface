@@ -10,6 +10,8 @@ import 'package:image/image.dart' as img;
 import '../../services/apple_detection_service.dart';
 import '../../services/disease_classifier_service.dart';
 import '../../services/database_service.dart';
+import '../../services/garden_cache_service.dart';
+import '../../models/my_garden_qr_model.dart';
 
 class ScanController extends ChangeNotifier {
   ScanController() {
@@ -38,27 +40,67 @@ class ScanController extends ChangeNotifier {
       final db = DatabaseService();
       final qrList = await db.listMyGardenQRCodes(userId);
 
-      _myPlants.clear();
-      for (final qr in qrList) {
-        _myPlants.add(PlantModel(
-          id: qr.id,
-          name: qr.plantName.isNotEmpty ? qr.plantName : 'Plant',
-          scientificName: qr.localName.isNotEmpty ? qr.localName : qr.category,
-          image: qr.imageUrl ?? '',
-          status: _healthStatusLabel(qr.notes),
-          statusColor: _healthStatusColor(qr.notes),
-          lastScan: _formatDate(qr.plantedAt),
-          location: qr.gardenId,
-          latitude: qr.locationLat != 0.0 ? qr.locationLat : null,
-          longitude: qr.locationLong != 0.0 ? qr.locationLong : null,
-        ));
-      }
+      // Sync image data to Hive so tabs & cards always have a URL available
+      await GardenCacheService.syncAll(
+        qrList
+            .map((qr) => {
+                  'docId': qr.id,
+                  'plantName': qr.plantName,
+                  'localName': qr.localName,
+                  'category': qr.category,
+                  'imageFileId': qr.imageFileId,
+                  'imageUrl': qr.imageUrl,
+                })
+            .toList(),
+      );
+
+      _buildPlantsFromQR(qrList);
     } catch (e) {
       debugPrint('ScanController.loadMyPlants failed: $e');
     }
 
     _isLoadingPlants = false;
     notifyListeners();
+  }
+
+  /// Update the in-memory plants list from a pre-fetched QR list.
+  /// Called from MyGardenScreen after a successful image upload so that
+  /// All-Plants / Healthy / Needs-Care tabs immediately reflect the new photo.
+  void updateFromQRCodes(List<MyGardenQRModel> qrList) {
+    _buildPlantsFromQR(qrList);
+    notifyListeners();
+  }
+
+  void _buildPlantsFromQR(List<MyGardenQRModel> qrList) {
+    _myPlants.clear();
+    final seenIds = <String>{};
+
+    for (final qr in qrList) {
+      // Only show QR codes that have been scanned and planted.
+      // A QR with plantedAt == null is one that was generated but not yet scanned.
+      if (qr.plantedAt == null) continue;
+
+      if (seenIds.contains(qr.id)) continue;
+      seenIds.add(qr.id);
+
+      // Prefer the URL on the Appwrite model; fall back to Hive cache
+      final imageUrl = (qr.imageUrl != null && qr.imageUrl!.isNotEmpty)
+          ? qr.imageUrl!
+          : (GardenCacheService.getImageUrl(qr.id) ?? '');
+
+      _myPlants.add(PlantModel(
+        id: qr.id,
+        name: qr.plantName.isNotEmpty ? qr.plantName : 'Plant',
+        scientificName: qr.localName.isNotEmpty ? qr.localName : qr.category,
+        image: imageUrl,
+        status: _healthStatusLabel(qr.notes),
+        statusColor: _healthStatusColor(qr.notes),
+        lastScan: _formatDate(qr.plantedAt),
+        location: qr.gardenId,
+        latitude: qr.locationLat != 0.0 ? qr.locationLat : null,
+        longitude: qr.locationLong != 0.0 ? qr.locationLong : null,
+      ));
+    }
   }
 
   static String _healthStatusLabel(String notes) {
@@ -265,30 +307,18 @@ class ScanController extends ChangeNotifier {
         '${now.day}/${now.month}/${now.year} ${now.hour}:${now.minute.toString().padLeft(2, '0')}';
 
     try {
-      // 1. Upload image to Appwrite storage
-      final fileId = await dbService.uploadPlantImage(imagePath);
-      final imageUrl = dbService.getPlantImageUrl(fileId);
+      // 1. Upload to Appwrite bucket + best-effort DB update
+      final result = await dbService.updateMyGardenPlantImage(
+        docId: plantId,
+        filePath: imagePath,
+      );
+      final fileId = result['fileId']!;
+      final imageUrl = result['url']!;
 
-      // 2. Try to update in the my_garden_qr_codes collection
-      try {
-        await dbService.updateMyGardenPlantImage(
-          docId: plantId,
-          filePath: imagePath,
-        );
-      } catch (e) {
-        debugPrint('my_garden_qr update failed (may not exist): $e');
-      }
+      // 2. Persist URL in Hive so it survives navigation and app restart
+      await GardenCacheService.updateImage(plantId, fileId, imageUrl);
 
-      // 3. Try to update in the plants collection
-      try {
-        await dbService.updatePlant(plantId, {
-          'image_url': imageUrl,
-        });
-      } catch (e) {
-        debugPrint('plants collection update failed: $e');
-      }
-
-      // 4. Update in-memory plant list
+      // 3. Update in-memory plant list
       final plantIndex = _myPlants.indexWhere((plant) => plant.id == plantId);
       if (plantIndex != -1) {
         final plant = _myPlants[plantIndex];
@@ -318,7 +348,8 @@ class ScanController extends ChangeNotifier {
     } catch (e) {
       debugPrint('Error updating plant image: $e');
 
-      // Fallback: at least update local image path in-memory
+      // Fallback: store local path in-memory only (will not survive restart,
+      // but at least shows something for this session)
       final plantIndex = _myPlants.indexWhere((plant) => plant.id == plantId);
       if (plantIndex != -1) {
         final plant = _myPlants[plantIndex];
@@ -560,7 +591,12 @@ class ScanController extends ChangeNotifier {
 
   /// Add a plant to the garden list (from QR scan + photo + GPS).
   void addPlantToGarden(PlantModel plant) {
-    _myPlants.insert(0, plant);
+    final existingIndex = _myPlants.indexWhere((p) => p.id == plant.id);
+    if (existingIndex != -1) {
+      _myPlants[existingIndex] = plant;
+    } else {
+      _myPlants.insert(0, plant);
+    }
     notifyListeners();
   }
 

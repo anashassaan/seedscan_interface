@@ -9,9 +9,9 @@ import '../../controllers/scan_controller.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/community_controller.dart';
 import '../../../models/community_model.dart';
-import '../home/my_garden_screen.dart';
 import '../home/qr_scanner_screen.dart';
 import '../social/community_plants_view.dart';
+import '../../appwrite_constants.dart';
 
 class PlantsView extends StatefulWidget {
   const PlantsView({super.key});
@@ -148,7 +148,6 @@ class _MyGardenTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final scanController = Provider.of<ScanController>(context);
     final plants = scanController.getMyPlants();
-    final cs = Theme.of(context).colorScheme;
 
     if (plants.isEmpty) {
       return _buildEmptyState(
@@ -286,6 +285,9 @@ class _CommunityCard extends StatelessWidget {
                   child: community.imageUrl != null
                       ? Image.network(
                           community.imageUrl!,
+                          headers: const {
+                            'X-Appwrite-Project': AppwriteConstants.projectId
+                          },
                           height: 160,
                           width: double.infinity,
                           fit: BoxFit.cover,
@@ -493,6 +495,9 @@ class _MyGardenPlantCard extends StatelessWidget {
                   const BorderRadius.vertical(top: Radius.circular(16)),
               child: Image.network(
                 plant.image,
+                headers: const {
+                  'X-Appwrite-Project': AppwriteConstants.projectId
+                },
                 height: 180,
                 width: double.infinity,
                 fit: BoxFit.cover,
@@ -637,9 +642,27 @@ class _MyGardenPlantCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     child: Image.network(
                       plant.image,
+                      headers: const {
+                        'X-Appwrite-Project': AppwriteConstants.projectId
+                      },
                       height: 200,
                       width: double.infinity,
                       fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          height: 200,
+                          color: Theme.of(context).colorScheme.surfaceVariant,
+                          child: Center(
+                            child: Icon(
+                              LucideIcons.flower2,
+                              size: 60,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -1186,6 +1209,9 @@ class _CommunityPlantCardState extends State<_CommunityPlantCard> {
                     const BorderRadius.vertical(top: Radius.circular(16)),
                 child: Image.network(
                   widget.plant.imageUrl,
+                  headers: const {
+                    'X-Appwrite-Project': AppwriteConstants.projectId
+                  },
                   height: 200,
                   width: double.infinity,
                   fit: BoxFit.cover,

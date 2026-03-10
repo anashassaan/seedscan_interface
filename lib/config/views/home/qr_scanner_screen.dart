@@ -231,7 +231,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
     final isCommunityQR = qrData.startsWith('SEEDSCAN|');
 
     if (isMyGardenQR) {
-      _showMyGardenQRResult(context, parsed!);
+      _showMyGardenQRResult(context, parsed);
     } else if (isCommunityQR) {
       _showCommunityQRResult(context, qrData);
     } else {
@@ -407,7 +407,6 @@ class _MyGardenQRDialogState extends State<_MyGardenQRDialog> {
   bool _isChecking = true;
   bool _existsInDb = false;
   MyGardenQRModel? _foundQr;
-  bool _alreadyInMyGarden = false;
   bool _isPlanting = false;
   bool _planted = false;
   String? _capturedImagePath;
@@ -419,28 +418,17 @@ class _MyGardenQRDialogState extends State<_MyGardenQRDialog> {
   }
 
   Future<void> _checkDatabase() async {
-    final auth = Provider.of<AuthController>(context, listen: false);
-    final userId = auth.userId ?? '';
-
     // 1. Check if this QR exists at all in the DB
     final found =
         await widget.dbService.findMyGardenQRByUniqueCode(widget.uniqueCode);
 
     // 2. Check if current user already has this QR in their garden
-    bool alreadyOwned = false;
-    if (found != null && found.ownerId == userId) {
-      alreadyOwned = true;
-    } else if (userId.isNotEmpty) {
-      alreadyOwned =
-          await widget.dbService.qrExistsForUser(widget.uniqueCode, userId);
-    }
 
     if (mounted) {
       setState(() {
         _isChecking = false;
         _existsInDb = found != null;
         _foundQr = found;
-        _alreadyInMyGarden = alreadyOwned;
       });
     }
   }
@@ -1086,43 +1074,49 @@ class _CommunityQRDialogState extends State<_CommunityQRDialog> {
 
       // 3. Upload plant image
       String? imageUrl;
+      String? uploadedFileId;
       try {
-        final fileId = await _db.uploadPlantImage(photo.path);
-        imageUrl = _db.getPlantImageUrl(fileId);
+        uploadedFileId = await _db.uploadPlantImage(photo.path);
+        imageUrl = _db.getPlantImageUrl(uploadedFileId);
       } catch (e) {
         debugPrint('Image upload failed: $e');
       }
 
-      // 4. Create plant record in Appwrite
+      // 4. Create plant record in Appwrite (auto-generated ID to avoid collisions)
       final auth = Provider.of<AuthController>(context, listen: false);
       final userId = auth.userId ?? '';
+      String createdPlantId = widget.qrId; // fallback
       try {
-        await _db.createPlant(
+        final createdPlant = await _db.createPlant(
           species: widget.plantName,
           guardianId: userId,
           lat: lat,
           lng: lng,
           imageUrl: imageUrl ?? photo.path,
           nickname: widget.plantType,
-          plantId: widget.qrId,
+          driveId: widget.communityId, // link plant to community
         );
+        createdPlantId = createdPlant.id;
+
+        // Keep community plant count in sync
+        try {
+          await _db.incrementCommunityPlantCount(widget.communityId);
+        } catch (e) {
+          debugPrint('Increment community plant count failed: $e');
+        }
       } catch (e) {
         debugPrint('Plant creation failed: $e');
       }
 
-      // 5. Create activity log
+      // 5. Create activity log — use the plant's Appwrite $id so admin history works
       try {
-        String? proofId;
-        try {
-          proofId = await _db.uploadPlantImage(photo.path);
-        } catch (_) {}
         await _db.createActivityLog(
           userId: userId,
-          plantId: widget.qrId,
+          plantId: createdPlantId,
           actionType: 'register',
           coinsAwarded: 10,
           verificationStatus: 'verified',
-          proofImageId: proofId ?? '',
+          proofImageId: uploadedFileId ?? '',
         );
       } catch (e) {
         debugPrint('Activity log failed: $e');
@@ -1130,25 +1124,26 @@ class _CommunityQRDialogState extends State<_CommunityQRDialog> {
 
       // 6. Auto-join community if not already a member
       String joinMsg = '';
-      if (!_alreadyMember && userId.isNotEmpty) {
+      if (userId.isNotEmpty) {
         try {
-          await _db.addCommunityMember(
+          final newlyJoined = await _db.safeJoinCommunity(
             communityId: widget.communityId,
             userId: userId,
             role: 'member',
           );
-          await _db.incrementCommunityMemberCount(widget.communityId);
-          joinMsg = 'You have been added to $_communityName!';
-          _alreadyMember = true;
+          if (newlyJoined) {
+            joinMsg = 'You have been added to $_communityName!';
+            _alreadyMember = true;
+          } else {
+            joinMsg = 'Plant registered in $_communityName.';
+          }
         } catch (e) {
           debugPrint('Auto-join failed: $e');
           joinMsg = 'Planted successfully, but could not join community.';
         }
-      } else if (_alreadyMember) {
-        joinMsg = 'Plant registered in $_communityName.';
       }
 
-      // 7. Add community to the Community tab (not My Garden)
+      // 7. Add community to the Community tab and reload memberships
       final communityCtrl =
           Provider.of<CommunityController>(context, listen: false);
       try {
@@ -1157,6 +1152,15 @@ class _CommunityQRDialogState extends State<_CommunityQRDialog> {
           communityCtrl.addCommunityLocally(freshCommunity);
         }
       } catch (_) {}
+
+      // Reload memberships from DB so community persists after restart
+      if (userId.isNotEmpty) {
+        try {
+          await communityCtrl.loadUserCommunities(userId);
+        } catch (e) {
+          debugPrint('loadUserCommunities failed after join: $e');
+        }
+      }
 
       communityCtrl.addPlantToCommunity(CommunityPlant(
         id: widget.qrId,
@@ -1433,7 +1437,6 @@ class _StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final text =
         scan.lastQr != null ? 'Last QR: ${scan.lastQr}' : 'QR Scanner Ready';
 

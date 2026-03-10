@@ -6,12 +6,14 @@ import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../../appwrite_constants.dart';
 import '../../controllers/scan_controller.dart';
 import '../../controllers/auth_controller.dart';
-import '../common/plant_card.dart';
 import 'qr_scanner_screen.dart';
 import 'generate_qr_screen.dart';
 import '../../../services/database_service.dart';
+import '../../../services/garden_cache_service.dart';
 import '../../../models/my_garden_qr_model.dart';
 
 class MyGardenScreen extends StatefulWidget {
@@ -58,6 +60,28 @@ class _MyGardenScreenState extends State<MyGardenScreen>
     setState(() => _isLoadingQRCodes = true);
     try {
       final codes = await _dbService.listMyGardenQRCodes(userId);
+
+      // Sync freshly fetched data into Hive so it survives navigation
+      await GardenCacheService.syncAll(
+        codes
+            .map((qr) => {
+                  'docId': qr.id,
+                  'plantName': qr.plantName,
+                  'localName': qr.localName,
+                  'category': qr.category,
+                  'imageFileId': qr.imageFileId,
+                  'imageUrl': qr.imageUrl,
+                })
+            .toList(),
+      );
+
+      // Also update ScanController plants so All-Plants / Healthy / Needs-Care
+      // tabs immediately reflect any new photos (e.g. just after upload).
+      if (mounted) {
+        final scanCtrl = Provider.of<ScanController>(context, listen: false);
+        scanCtrl.updateFromQRCodes(codes);
+      }
+
       setState(() {
         _myGardenQRCodes = codes;
         _isLoadingQRCodes = false;
@@ -357,13 +381,18 @@ class _MyGardenScreenState extends State<MyGardenScreen>
     );
   }
 
-  /// Smart image builder: uses Image.file for local paths, Image.network for URLs.
+  /// Smart image builder: uses Image.file for local paths,
+  /// CachedNetworkImage for remote URLs (Appwrite preview), placeholder when empty.
   Widget _buildPlantImage(
     String imagePath, {
     double? width,
     double? height,
     required ColorScheme cs,
   }) {
+    if (imagePath.trim().isEmpty) {
+      return _imagePlaceholder(width, height, cs);
+    }
+
     final isLocal = imagePath.startsWith('/') ||
         imagePath.startsWith('C:') ||
         imagePath.contains('\\');
@@ -376,12 +405,14 @@ class _MyGardenScreenState extends State<MyGardenScreen>
         errorBuilder: (context, _, __) => _imagePlaceholder(width, height, cs),
       );
     }
-    return Image.network(
-      imagePath,
+    return CachedNetworkImage(
+      imageUrl: imagePath,
+      httpHeaders: const {'X-Appwrite-Project': AppwriteConstants.projectId},
       width: width,
       height: height,
       fit: BoxFit.cover,
-      errorBuilder: (context, _, __) => _imagePlaceholder(width, height, cs),
+      placeholder: (_, __) => _imagePlaceholder(width, height, cs),
+      errorWidget: (_, __, ___) => _imagePlaceholder(width, height, cs),
     );
   }
 
@@ -391,6 +422,43 @@ class _MyGardenScreenState extends State<MyGardenScreen>
       height: height,
       color: cs.surfaceContainerHighest,
       child: Icon(LucideIcons.flower2, size: 40, color: cs.onSurfaceVariant),
+    );
+  }
+
+  /// Thumbnail for a QR code card: real photo if available, coloured icon fallback.
+  Widget _buildQRThumbnail(MyGardenQRModel qr, ColorScheme cs) {
+    // Prefer the URL stored on the model; also check Hive cache as a fallback
+    final imageUrl = (qr.imageUrl != null && qr.imageUrl!.isNotEmpty)
+        ? qr.imageUrl!
+        : GardenCacheService.getImageUrl(qr.id);
+    final isPlant = qr.qrType == 'Plant';
+
+    if (imageUrl != null) {
+      return CachedNetworkImage(
+        imageUrl: imageUrl,
+        httpHeaders: const {'X-Appwrite-Project': AppwriteConstants.projectId},
+        width: 60,
+        height: 60,
+        fit: BoxFit.cover,
+        placeholder: (_, __) => _qrIconFallback(isPlant, cs),
+        errorWidget: (_, __, ___) => _qrIconFallback(isPlant, cs),
+      );
+    }
+    return _qrIconFallback(isPlant, cs);
+  }
+
+  Widget _qrIconFallback(bool isPlant, ColorScheme cs) {
+    return Container(
+      width: 60,
+      height: 60,
+      color: isPlant
+          ? Colors.teal.withOpacity(0.1)
+          : Colors.amber.withOpacity(0.1),
+      child: Icon(
+        isPlant ? LucideIcons.flower2 : LucideIcons.sprout,
+        size: 28,
+        color: isPlant ? Colors.teal : Colors.amber.shade700,
+      ),
     );
   }
 
@@ -655,21 +723,10 @@ class _MyGardenScreenState extends State<MyGardenScreen>
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              // Icon
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: isPlant
-                      ? Colors.teal.withOpacity(0.1)
-                      : Colors.amber.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(
-                  isPlant ? LucideIcons.flower2 : LucideIcons.sprout,
-                  size: 28,
-                  color: isPlant ? Colors.teal : Colors.amber.shade700,
-                ),
+              // Image / Icon thumbnail
+              ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: _buildQRThumbnail(qr, cs),
               ),
               const SizedBox(width: 16),
 
@@ -773,246 +830,447 @@ class _MyGardenScreenState extends State<MyGardenScreen>
     final cs = Theme.of(context).colorScheme;
     final isPlant = qr.qrType == 'Plant';
 
+    // Mutable modal state – lives outside StatefulBuilder so it persists across rebuilds.
+    String? currentImageUrl = (qr.imageUrl != null && qr.imageUrl!.isNotEmpty)
+        ? qr.imageUrl
+        : GardenCacheService.getImageUrl(qr.id);
+    bool isUploading = false;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.7,
-          maxChildSize: 0.9,
-          minChildSize: 0.5,
-          builder: (context, scrollController) {
-            return Container(
-              decoration: BoxDecoration(
-                color: cs.surface,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(28),
-                ),
-              ),
-              child: ListView(
-                controller: scrollController,
-                padding: const EdgeInsets.all(24),
-                children: [
-                  // Handle bar
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: cs.onSurface.withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return DraggableScrollableSheet(
+              initialChildSize: 0.85,
+              maxChildSize: 0.95,
+              minChildSize: 0.5,
+              builder: (context, scrollController) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: cs.surface,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(28),
                     ),
                   ),
-                  const SizedBox(height: 20),
+                  child: ListView(
+                    controller: scrollController,
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      // ── Handle bar ───────────────────────────────────────
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: cs.onSurface.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
 
-                  // MY GARDEN badge
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 6,
+                      // ── Plant Image (tap to capture / update) ─────────────
+                      GestureDetector(
+                        onTap: isUploading
+                            ? null
+                            : () async {
+                                final source =
+                                    await _showImageSourceDialog(context);
+                                if (source == null) return;
+
+                                final picker = ImagePicker();
+                                final XFile? picked = await picker.pickImage(
+                                  source: source,
+                                  imageQuality: 85,
+                                );
+                                if (picked == null) return;
+
+                                setModalState(() => isUploading = true);
+                                try {
+                                  final result =
+                                      await _dbService.updateMyGardenPlantImage(
+                                    docId: qr.id,
+                                    filePath: picked.path,
+                                  );
+                                  final newUrl = result['url']!;
+                                  final newFileId = result['fileId']!;
+
+                                  // Persist in Hive so it survives logout/reload
+                                  await GardenCacheService.updateImage(
+                                      qr.id, newFileId, newUrl);
+
+                                  setModalState(() {
+                                    currentImageUrl = newUrl;
+                                    isUploading = false;
+                                  });
+
+                                  // Refresh the parent list in background
+                                  _loadMyGardenQRCodes();
+
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content:
+                                            Text('Photo updated successfully!'),
+                                        backgroundColor: Colors.green,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  setModalState(() => isUploading = false);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Upload failed: $e'),
+                                        backgroundColor: Colors.red,
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            // Image or placeholder
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: currentImageUrl != null
+                                  ? CachedNetworkImage(
+                                      imageUrl: currentImageUrl!,
+                                      httpHeaders: const {
+                                        'X-Appwrite-Project':
+                                            AppwriteConstants.projectId,
+                                      },
+                                      width: double.infinity,
+                                      height: 220,
+                                      fit: BoxFit.cover,
+                                      placeholder: (_, __) =>
+                                          _noImagePlaceholder(cs),
+                                      errorWidget: (_, __, ___) =>
+                                          _noImagePlaceholder(cs),
+                                    )
+                                  : _noImagePlaceholder(cs),
+                            ),
+                            // Camera badge overlay
+                            if (!isUploading)
+                              Positioned(
+                                bottom: 10,
+                                right: 10,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: cs.primary.withOpacity(0.88),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(LucideIcons.camera,
+                                          size: 16, color: cs.onPrimary),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        currentImageUrl != null
+                                            ? 'Update Photo'
+                                            : 'Add Photo',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: cs.onPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            // Upload progress overlay
+                            if (isUploading)
+                              Container(
+                                width: double.infinity,
+                                height: 220,
+                                decoration: BoxDecoration(
+                                  color: Colors.black45,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                      decoration: BoxDecoration(
-                        color: Colors.green.shade100,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.green.shade400),
+                      const SizedBox(height: 20),
+
+                      // ── MY GARDEN badge ──────────────────────────────────
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade100,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.green.shade400),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(LucideIcons.home,
+                                  size: 14, color: Colors.green.shade800),
+                              const SizedBox(width: 6),
+                              Text(
+                                'MY GARDEN',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.green.shade800,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      const SizedBox(height: 16),
+
+                      // ── Plant Name ───────────────────────────────────────
+                      Text(
+                        qr.plantName,
+                        style: GoogleFonts.poppins(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: cs.onSurface,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        qr.localName,
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontStyle: FontStyle.italic,
+                          color: cs.onSurface.withOpacity(0.6),
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+
+                      // ── Type & Season badges ─────────────────────────────
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(LucideIcons.home,
-                              size: 14, color: Colors.green.shade800),
-                          const SizedBox(width: 6),
-                          Text(
-                            'MY GARDEN',
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.green.shade800,
-                              letterSpacing: 1,
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isPlant
+                                  ? Colors.teal.withOpacity(0.1)
+                                  : Colors.amber.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isPlant
+                                      ? LucideIcons.flower2
+                                      : LucideIcons.sprout,
+                                  size: 16,
+                                  color: isPlant
+                                      ? Colors.teal
+                                      : Colors.amber.shade700,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  qr.qrType,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: isPlant
+                                        ? Colors.teal
+                                        : Colors.amber.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: cs.primaryContainer,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              qr.category,
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: cs.onPrimaryContainer,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+                      const SizedBox(height: 24),
 
-                  // Plant Name
-                  Text(
-                    qr.plantName,
-                    style: GoogleFonts.poppins(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: cs.onSurface,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    qr.localName,
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontStyle: FontStyle.italic,
-                      color: cs.onSurface.withOpacity(0.6),
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
+                      // ── Details ──────────────────────────────────────────
+                      _qrDetailRow(context,
+                          icon: LucideIcons.hash,
+                          label: 'Unique ID',
+                          value: qr.uniqueCode),
+                      _qrDetailRow(context,
+                          icon: LucideIcons.sun,
+                          label: 'Best Season',
+                          value: qr.bestSeason),
+                      if (isPlant && qr.plantAge != null)
+                        _qrDetailRow(context,
+                            icon: LucideIcons.clock,
+                            label: 'Plant Age',
+                            value: qr.plantAge!),
+                      _qrDetailRow(context,
+                          icon: LucideIcons.home,
+                          label: 'Garden ID',
+                          value: qr.gardenId),
+                      _qrDetailRow(context,
+                          icon: LucideIcons.user,
+                          label: 'Owner',
+                          value: qr.ownerName),
+                      if (qr.notes.isNotEmpty)
+                        _qrDetailRow(context,
+                            icon: LucideIcons.fileText,
+                            label: 'Notes',
+                            value: qr.notes),
+                      _qrDetailRow(context,
+                          icon: LucideIcons.calendar,
+                          label: 'Created',
+                          value: qr.createdAt.toString().substring(0, 16)),
 
-                  // Type & Season badges
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isPlant
-                              ? Colors.teal.withOpacity(0.1)
-                              : Colors.amber.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isPlant
-                                  ? LucideIcons.flower2
-                                  : LucideIcons.sprout,
-                              size: 16,
-                              color:
-                                  isPlant ? Colors.teal : Colors.amber.shade700,
+                      const SizedBox(height: 24),
+
+                      // ── Delete button ─────────────────────────────────────
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Delete QR Code'),
+                              content: Text(
+                                  'Are you sure you want to delete "${qr.plantName}" QR code?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('Delete',
+                                      style: TextStyle(color: Colors.red)),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 6),
-                            Text(
-                              qr.qrType,
-                              style: GoogleFonts.poppins(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: isPlant
-                                    ? Colors.teal
-                                    : Colors.amber.shade700,
-                              ),
-                            ),
-                          ],
+                          );
+                          if (confirm == true) {
+                            try {
+                              await _dbService.deleteMyGardenQR(qr.id);
+                              if (context.mounted) Navigator.pop(context);
+                              _loadMyGardenQRCodes();
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text('Error deleting: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
+                            }
+                          }
+                        },
+                        icon: const Icon(LucideIcons.trash2, color: Colors.red),
+                        label: const Text('Delete QR Code',
+                            style: TextStyle(color: Colors.red)),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          minimumSize: const Size(double.infinity, 48),
+                          side: const BorderSide(color: Colors.red),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: cs.primaryContainer,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          qr.category,
-                          style: GoogleFonts.poppins(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: cs.onPrimaryContainer,
-                          ),
-                        ),
-                      ),
+                      const SizedBox(height: 20),
                     ],
                   ),
-                  const SizedBox(height: 24),
-
-                  // Details
-                  _qrDetailRow(context,
-                      icon: LucideIcons.hash,
-                      label: 'Unique ID',
-                      value: qr.uniqueCode),
-                  _qrDetailRow(context,
-                      icon: LucideIcons.sun,
-                      label: 'Best Season',
-                      value: qr.bestSeason),
-                  if (isPlant && qr.plantAge != null)
-                    _qrDetailRow(context,
-                        icon: LucideIcons.clock,
-                        label: 'Plant Age',
-                        value: qr.plantAge!),
-                  _qrDetailRow(context,
-                      icon: LucideIcons.home,
-                      label: 'Garden ID',
-                      value: qr.gardenId),
-                  _qrDetailRow(context,
-                      icon: LucideIcons.user,
-                      label: 'Owner',
-                      value: qr.ownerName),
-                  if (qr.notes.isNotEmpty)
-                    _qrDetailRow(context,
-                        icon: LucideIcons.fileText,
-                        label: 'Notes',
-                        value: qr.notes),
-                  _qrDetailRow(context,
-                      icon: LucideIcons.calendar,
-                      label: 'Created',
-                      value: qr.createdAt.toString().substring(0, 16)),
-
-                  const SizedBox(height: 24),
-
-                  // Delete button
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text('Delete QR Code'),
-                          content: Text(
-                              'Are you sure you want to delete "${qr.plantName}" QR code?'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(ctx, false),
-                              child: const Text('Cancel'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.pop(ctx, true),
-                              child: const Text('Delete',
-                                  style: TextStyle(color: Colors.red)),
-                            ),
-                          ],
-                        ),
-                      );
-                      if (confirm == true) {
-                        try {
-                          await _dbService.deleteMyGardenQR(qr.id);
-                          if (context.mounted) Navigator.pop(context);
-                          _loadMyGardenQRCodes();
-                        } catch (e) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Error deleting: $e'),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        }
-                      }
-                    },
-                    icon: const Icon(LucideIcons.trash2, color: Colors.red),
-                    label: const Text('Delete QR Code',
-                        style: TextStyle(color: Colors.red)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      minimumSize: const Size(double.infinity, 48),
-                      side: const BorderSide(color: Colors.red),
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
             );
           },
         );
       },
+    );
+  }
+
+  // ── Helper widgets / dialogs for image upload ──────────────────────────────
+
+  /// Placeholder shown in the detail sheet when no photo has been captured yet.
+  Widget _noImagePlaceholder(ColorScheme cs) {
+    return Container(
+      width: double.infinity,
+      height: 220,
+      decoration: BoxDecoration(
+        color: cs.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(LucideIcons.camera, size: 48, color: cs.onSurfaceVariant),
+          const SizedBox(height: 8),
+          Text(
+            'Tap to add a photo',
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              color: cs.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Prompt user to pick Camera or Gallery.
+  Future<ImageSource?> _showImageSourceDialog(BuildContext context) {
+    return showDialog<ImageSource>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          'Select Photo Source',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(LucideIcons.camera),
+              title: Text('Camera', style: GoogleFonts.poppins()),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(LucideIcons.image),
+              title: Text('Gallery', style: GoogleFonts.poppins()),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

@@ -2,9 +2,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../controllers/admin_controller.dart';
-import '../../../models/community_model.dart';
-import '../../../models/user_model.dart'; // or wherever AppUser is
 import 'qr_code_manager_view.dart';
 import 'member_plants_view.dart';
 
@@ -18,6 +17,7 @@ class CommunityDetailsView extends StatefulWidget {
 
 class _CommunityDetailsViewState extends State<CommunityDetailsView> {
   bool _refreshing = false;
+  bool _updatingImage = false;
 
   Future<void> _refresh() async {
     if (_refreshing) return;
@@ -26,6 +26,68 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
       await Provider.of<AdminController>(context, listen: false).refreshStats();
     } finally {
       if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  Future<void> _pickAndUpdateImage() async {
+    final picker = ImagePicker();
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: cs.outlineVariant,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Icon(LucideIcons.camera, color: cs.primary),
+                title: const Text('Take Photo'),
+                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              ),
+              ListTile(
+                leading: Icon(LucideIcons.image, color: cs.primary),
+                title: const Text('Choose from Gallery'),
+                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
+    if (source == null) return;
+
+    final picked = await picker.pickImage(source: source, imageQuality: 80);
+    if (picked == null || !mounted) return;
+
+    setState(() => _updatingImage = true);
+    final admin = Provider.of<AdminController>(context, listen: false);
+    final success =
+        await admin.updateCommunityImage(widget.communityIndex, picked.path);
+    if (mounted) {
+      setState(() => _updatingImage = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              success ? 'Community image updated' : 'Failed to update image'),
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          backgroundColor: success
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.error,
+        ),
+      );
     }
   }
 
@@ -310,9 +372,10 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
       ),
       body: Column(
         children: [
-          // ── Community Image Banner ──
-          if (community.displayImage != null)
-            Container(
+          // ── Community Image Banner (tap to change) ──
+          GestureDetector(
+            onTap: _updatingImage ? null : _pickAndUpdateImage,
+            child: Container(
               margin: const EdgeInsets.fromLTRB(20, 8, 20, 0),
               height: 140,
               width: double.infinity,
@@ -321,26 +384,72 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
                 color: cs.surfaceVariant.withOpacity(0.3),
               ),
               clipBehavior: Clip.antiAlias,
-              child: community.hasNetworkImage
-                  ? Image.network(
-                      community.imageUrl!,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      errorBuilder: (_, __, ___) => Center(
-                        child: Icon(LucideIcons.image,
-                            size: 36, color: cs.onSurface.withOpacity(0.15)),
-                      ),
-                    )
-                  : Image.file(
-                      File(community.imagePath!),
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      errorBuilder: (_, __, ___) => Center(
-                        child: Icon(LucideIcons.image,
-                            size: 36, color: cs.onSurface.withOpacity(0.15)),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (community.displayImage != null)
+                    community.hasNetworkImage
+                        ? Image.network(
+                            community.imageUrl!,
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            errorBuilder: (_, __, ___) => Center(
+                              child: Icon(LucideIcons.image,
+                                  size: 36,
+                                  color: cs.onSurface.withOpacity(0.15)),
+                            ),
+                          )
+                        : Image.file(
+                            File(community.imagePath!),
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            errorBuilder: (_, __, ___) => Center(
+                              child: Icon(LucideIcons.image,
+                                  size: 36,
+                                  color: cs.onSurface.withOpacity(0.15)),
+                            ),
+                          )
+                  else
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(LucideIcons.imagePlus,
+                              size: 32, color: cs.onSurface.withOpacity(0.3)),
+                          const SizedBox(height: 6),
+                          Text('Tap to add cover image',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: cs.onSurface.withOpacity(0.4))),
+                        ],
                       ),
                     ),
+                  // Edit overlay
+                  if (!_updatingImage)
+                    Positioned(
+                      right: 8,
+                      bottom: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: cs.surface.withOpacity(0.85),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(LucideIcons.camera,
+                            size: 18, color: cs.primary),
+                      ),
+                    ),
+                  if (_updatingImage)
+                    Container(
+                      color: cs.surface.withOpacity(0.6),
+                      child: const Center(
+                        child: CircularProgressIndicator(strokeWidth: 2.5),
+                      ),
+                    ),
+                ],
+              ),
             ),
+          ),
 
           // ── Community header card ──
           Padding(
@@ -444,86 +553,97 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
           ),
           const SizedBox(height: 8),
 
-          // ── QR Code Manager Action ──
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-            child: Material(
-              color: cs.surfaceVariant.withOpacity(0.25),
-              borderRadius: BorderRadius.circular(18),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(18),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => QrCodeManagerView(
-                        communityIndex: widget.communityIndex),
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: cs.primaryContainer.withOpacity(0.4),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(LucideIcons.qrCode,
-                            color: cs.primary, size: 26),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('QR Manager',
-                                style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    color: cs.onSurface)),
-                            const SizedBox(height: 2),
-                            Text('Generate QR codes or bulk import via CSV',
-                                style: TextStyle(
-                                    fontSize: 13,
-                                    color: cs.onSurface.withOpacity(0.55))),
-                          ],
-                        ),
-                      ),
-                      Icon(LucideIcons.chevronRight,
-                          size: 20, color: cs.onSurface.withOpacity(0.3)),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // Section label
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-            child: Row(
-              children: [
-                Text('Members',
-                    style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: cs.onSurface)),
-                const Spacer(),
-                Text('${community.members.length}',
-                    style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: cs.primary)),
-              ],
-            ),
-          ),
-
-          // ── Member list ──
+          // ── Scrollable section ──
           Expanded(
-            child: community.members.isEmpty
-                ? Center(
-                    child: SingleChildScrollView(
+            child: RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                padding: const EdgeInsets.only(bottom: 24),
+                children: [
+                  // ── QR Code Manager Action ──
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    child: Material(
+                      color: cs.surfaceVariant.withOpacity(0.25),
+                      borderRadius: BorderRadius.circular(18),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => QrCodeManagerView(
+                                communityIndex: widget.communityIndex),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: cs.primaryContainer.withOpacity(0.4),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Icon(LucideIcons.qrCode,
+                                    color: cs.primary, size: 26),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('QR Manager',
+                                        style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w700,
+                                            color: cs.onSurface)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                        'Generate QR codes or bulk import via CSV',
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            color: cs.onSurface
+                                                .withOpacity(0.55))),
+                                  ],
+                                ),
+                              ),
+                              Icon(LucideIcons.chevronRight,
+                                  size: 20,
+                                  color: cs.onSurface.withOpacity(0.3)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Section label
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                    child: Row(
+                      children: [
+                        Text('Members',
+                            style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: cs.onSurface)),
+                        const Spacer(),
+                        Text('${community.members.length}',
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: cs.primary)),
+                      ],
+                    ),
+                  ),
+
+                  // ── Member list ──
+                  if (community.members.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -550,246 +670,101 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
                         ],
                       ),
                     ),
-                  )
-                : RefreshIndicator(
-                    onRefresh: _refresh,
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 4),
-                      itemCount: community.members.length,
-                      itemBuilder: (context, userIndex) {
-                        final user = community.members[userIndex];
-                        final initial = user.name.isNotEmpty
-                            ? user.name[0].toUpperCase()
-                            : "?";
-                        final plantCount = user.stats
-                            .fold<int>(0, (sum, s) => sum + (s.count ?? 0));
 
-                        return Card(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            side: BorderSide(color: cs.outlineVariant),
+                  ...community.members.asMap().entries.map((entry) {
+                    final userIndex = entry.key;
+                    final user = entry.value;
+                    final initial =
+                        user.name.isNotEmpty ? user.name[0].toUpperCase() : "?";
+                    final plantCount = user.stats
+                        .fold<int>(0, (sum, s) => sum + (s.count ?? 0));
+
+                    return Card(
+                      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(color: cs.outlineVariant),
+                      ),
+                      child: Theme(
+                        data: Theme.of(context)
+                            .copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          tilePadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 4),
+                          childrenPadding:
+                              const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          leading: CircleAvatar(
+                            radius: 22,
+                            backgroundColor: cs.primaryContainer,
+                            child: Text(initial,
+                                style: TextStyle(
+                                    color: cs.onPrimaryContainer,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16)),
                           ),
-                          child: Theme(
-                            data: Theme.of(context)
-                                .copyWith(dividerColor: Colors.transparent),
-                            child: ExpansionTile(
-                              tilePadding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 4),
-                              childrenPadding:
-                                  const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                              leading: CircleAvatar(
-                                radius: 22,
-                                backgroundColor: cs.primaryContainer,
-                                child: Text(initial,
-                                    style: TextStyle(
-                                        color: cs.onPrimaryContainer,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16)),
-                              ),
-                              title: Text(user.name,
-                                  style: TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                      color: cs.onSurface)),
-                              subtitle: Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Row(
-                                  children: [
-                                    Flexible(
-                                      child: Text(user.email,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              color: cs.onSurface
-                                                  .withValues(alpha: 0.5))),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: user.role == 'Admin'
-                                            ? cs.errorContainer
-                                                .withValues(alpha: 0.5)
-                                            : cs.surfaceVariant
-                                                .withValues(alpha: 0.6),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(user.role,
-                                          style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                              color: user.role == 'Admin'
-                                                  ? cs.onErrorContainer
-                                                  : cs.onSurfaceVariant)),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                          title: Text(user.name,
+                              style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: cs.onSurface)),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Row(
                               children: [
-                                // Stats row
+                                Flexible(
+                                  child: Text(user.email,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: cs.onSurface
+                                              .withValues(alpha: 0.5))),
+                                ),
+                                const SizedBox(width: 8),
                                 Container(
-                                  padding: const EdgeInsets.all(14),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: cs.surfaceVariant
-                                        .withValues(alpha: 0.25),
-                                    borderRadius: BorderRadius.circular(14),
+                                    color: user.role == 'Admin'
+                                        ? cs.errorContainer
+                                            .withValues(alpha: 0.5)
+                                        : cs.surfaceVariant
+                                            .withValues(alpha: 0.6),
+                                    borderRadius: BorderRadius.circular(6),
                                   ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                  child: Text(user.role,
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: user.role == 'Admin'
+                                              ? cs.onErrorContainer
+                                              : cs.onSurfaceVariant)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          children: [
+                            // Stats row
+                            Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color:
+                                    cs.surfaceVariant.withValues(alpha: 0.25),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Flexible(
-                                            child: Material(
-                                              color: Colors.transparent,
-                                              child: InkWell(
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                                onTap: () {
-                                                  Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (_) =>
-                                                          MemberPlantsView(
-                                                        userId: user.id,
-                                                        userName: user.name,
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                                child: Padding(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 4,
-                                                      vertical: 2),
-                                                  child: Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      Icon(LucideIcons.leaf,
-                                                          size: 16,
-                                                          color: cs.primary),
-                                                      const SizedBox(width: 6),
-                                                      Flexible(
-                                                        child: Text(
-                                                            "$plantCount plants",
-                                                            overflow:
-                                                                TextOverflow
-                                                                    .ellipsis,
-                                                            style: TextStyle(
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w500,
-                                                                color: cs
-                                                                    .onSurface)),
-                                                      ),
-                                                      const SizedBox(width: 4),
-                                                      Icon(
-                                                          LucideIcons
-                                                              .externalLink,
-                                                          size: 12,
-                                                          color: cs.primary),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(LucideIcons.coins,
-                                                  size: 16, color: cs.primary),
-                                              const SizedBox(width: 4),
-                                              Text("${user.totalCoins}",
-                                                  style: TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                      color: cs.primary)),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                      if (user.stats.isNotEmpty) ...[
-                                        const SizedBox(height: 12),
-                                        // Plant activity table
-                                        ClipRRect(
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                          child: Table(
-                                            border: TableBorder.all(
-                                                color: cs.outlineVariant
-                                                    .withValues(alpha: 0.5),
-                                                borderRadius:
-                                                    BorderRadius.circular(10)),
-                                            columnWidths: const {
-                                              0: FlexColumnWidth(2),
-                                              1: FlexColumnWidth(1),
-                                              2: FlexColumnWidth(1),
-                                            },
-                                            children: [
-                                              TableRow(
-                                                decoration: BoxDecoration(
-                                                    color: cs.surfaceVariant
-                                                        .withValues(
-                                                            alpha: 0.5)),
-                                                children: [
-                                                  _tableHeader("Plant"),
-                                                  _tableHeader("Count"),
-                                                  _tableHeader("Coins"),
-                                                ],
-                                              ),
-                                              ...user.stats.map((s) =>
-                                                  TableRow(children: [
-                                                    _tableCell(
-                                                        s.type ?? "Unknown"),
-                                                    _tableCell((s.count ?? 0)
-                                                        .toString()),
-                                                    _tableCell(
-                                                        "+${s.coinsEarned ?? 0}"),
-                                                  ])),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                      const SizedBox(height: 10),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.end,
-                                        children: [
-                                          TextButton.icon(
-                                            onPressed: () =>
-                                                _confirmRemoveMember(
-                                                    context,
-                                                    admin,
-                                                    userIndex,
-                                                    user.name),
-                                            icon: Icon(LucideIcons.userMinus,
-                                                size: 16, color: cs.error),
-                                            label: Text('Remove',
-                                                style: TextStyle(
-                                                    color: cs.error,
-                                                    fontSize: 13,
-                                                    fontWeight:
-                                                        FontWeight.w500)),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          ElevatedButton.icon(
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor:
-                                                  cs.primaryContainer,
-                                              foregroundColor:
-                                                  cs.onPrimaryContainer,
-                                              elevation: 0,
-                                            ),
-                                            onPressed: () {
+                                      Flexible(
+                                        child: Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            onTap: () {
                                               Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
@@ -797,26 +772,156 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
                                                       MemberPlantsView(
                                                     userId: user.id,
                                                     userName: user.name,
+                                                    communityId: community.id,
+                                                    communityName:
+                                                        community.name,
                                                   ),
                                                 ),
                                               );
                                             },
-                                            icon: const Icon(LucideIcons.leaf,
-                                                size: 16),
-                                            label: const Text('View Plants'),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 4,
+                                                      vertical: 2),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(LucideIcons.leaf,
+                                                      size: 16,
+                                                      color: cs.primary),
+                                                  const SizedBox(width: 6),
+                                                  Flexible(
+                                                    child: Text(
+                                                        "$plantCount plants",
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                        style: TextStyle(
+                                                            fontWeight:
+                                                                FontWeight.w500,
+                                                            color:
+                                                                cs.onSurface)),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Icon(LucideIcons.externalLink,
+                                                      size: 12,
+                                                      color: cs.primary),
+                                                ],
+                                              ),
+                                            ),
                                           ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(LucideIcons.coins,
+                                              size: 16, color: cs.primary),
+                                          const SizedBox(width: 4),
+                                          Text("${user.totalCoins}",
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                  color: cs.primary)),
                                         ],
                                       ),
                                     ],
                                   ),
-                                ),
-                              ],
+                                  if (user.stats.isNotEmpty) ...[
+                                    const SizedBox(height: 12),
+                                    // Plant activity table
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Table(
+                                        border: TableBorder.all(
+                                            color: cs.outlineVariant
+                                                .withValues(alpha: 0.5),
+                                            borderRadius:
+                                                BorderRadius.circular(10)),
+                                        columnWidths: const {
+                                          0: FlexColumnWidth(2),
+                                          1: FlexColumnWidth(1),
+                                          2: FlexColumnWidth(1),
+                                        },
+                                        children: [
+                                          TableRow(
+                                            decoration: BoxDecoration(
+                                                color: cs.surfaceVariant
+                                                    .withValues(alpha: 0.5)),
+                                            children: [
+                                              _tableHeader("Plant"),
+                                              _tableHeader("Count"),
+                                              _tableHeader("Coins"),
+                                            ],
+                                          ),
+                                          ...user.stats.map((s) =>
+                                              TableRow(children: [
+                                                _tableCell(s.type ?? "Unknown"),
+                                                _tableCell(
+                                                    (s.count ?? 0).toString()),
+                                                _tableCell(
+                                                    "+${s.coinsEarned ?? 0}"),
+                                              ])),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 10),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      TextButton.icon(
+                                        onPressed: () => _confirmRemoveMember(
+                                            context,
+                                            admin,
+                                            userIndex,
+                                            user.name),
+                                        icon: Icon(LucideIcons.userMinus,
+                                            size: 16, color: cs.error),
+                                        label: Text('Remove',
+                                            style: TextStyle(
+                                                color: cs.error,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w500)),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: cs.primaryContainer,
+                                          foregroundColor:
+                                              cs.onPrimaryContainer,
+                                          elevation: 0,
+                                        ),
+                                        onPressed: () {
+                                          Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (_) => MemberPlantsView(
+                                                userId: user.id,
+                                                userName: user.name,
+                                                communityId: community.id,
+                                                communityName: community.name,
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                        icon: const Icon(LucideIcons.leaf,
+                                            size: 16),
+                                        label: const Text('View Plants'),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -879,6 +984,7 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildActionCard(
     BuildContext context, {
     required IconData icon,

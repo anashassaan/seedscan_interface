@@ -567,7 +567,7 @@ class _ScanScreenState extends State<ScanScreen>
         parsed['id'] != null;
 
     if (isMyGardenQR) {
-      _showMyGardenQRDialog(context, parsed!);
+      _showMyGardenQRDialog(context, parsed);
     } else {
       _showGenericQRDialog(context, qrData);
     }
@@ -607,7 +607,6 @@ class _ScanScreenState extends State<ScanScreen>
   void _showMyGardenQRDialog(
       BuildContext context, Map<String, dynamic> qrPayload) {
     final dbService = DatabaseService();
-    final auth = Provider.of<AuthController>(context, listen: false);
     final uniqueCode = qrPayload['id'] as String;
     final plantName = qrPayload['plantName'] ?? 'Unknown';
     final localName = qrPayload['localName'] ?? '';
@@ -1046,18 +1045,31 @@ class _ScanMyGardenQRDialogState extends State<_ScanMyGardenQRDialog> {
       final gardenId = 'GARDEN-${auth.userHandle.toUpperCase()}';
       try {
         if (_foundQr != null) {
-          await widget.dbService.addScannedQRToMyGarden(
-            originalQr: _foundQr!,
-            newOwnerId: auth.userId ?? '',
-            newOwnerName: auth.userName,
-            newOwnerEmail: auth.userEmail ?? '',
-            newGardenId: gardenId,
-            locationLat: lat,
-            locationLong: lng,
-            imageFileId: imageFileId,
-            imageUrl: imageUrl,
-            plantedAt: now,
-          );
+          if (_foundQr!.ownerId == auth.userId) {
+            // It's their own plant. Just update the existing record with photo/location.
+            await widget.dbService.updateMyGardenQRPlantingInfo(
+              docId: _foundQr!.id,
+              locationLat: lat,
+              locationLong: lng,
+              imageFileId: imageFileId,
+              imageUrl: imageUrl,
+              plantedAt: now,
+            );
+          } else {
+            // It's someone else's plant. Clone it to "My Garden".
+            await widget.dbService.addScannedQRToMyGarden(
+              originalQr: _foundQr!,
+              newOwnerId: auth.userId ?? '',
+              newOwnerName: auth.userName,
+              newOwnerEmail: auth.userEmail ?? '',
+              newGardenId: gardenId,
+              locationLat: lat,
+              locationLong: lng,
+              imageFileId: imageFileId,
+              imageUrl: imageUrl,
+              plantedAt: now,
+            );
+          }
         } else {
           await widget.dbService.createMyGardenQR(
             uniqueCode: widget.uniqueCode,
@@ -1511,43 +1523,49 @@ class _ScanCommunityQRDialogState extends State<_ScanCommunityQRDialog> {
 
       // 3. Upload plant image
       String? imageUrl;
+      String? uploadedFileId;
       try {
-        final fileId = await _db.uploadPlantImage(photo.path);
-        imageUrl = _db.getPlantImageUrl(fileId);
+        uploadedFileId = await _db.uploadPlantImage(photo.path);
+        imageUrl = _db.getPlantImageUrl(uploadedFileId);
       } catch (e) {
         debugPrint('Image upload failed: $e');
       }
 
-      // 4. Create plant record in Appwrite
+      // 4. Create plant record in Appwrite (auto-generated ID to avoid collisions)
       final auth = Provider.of<AuthController>(context, listen: false);
       final userId = auth.userId ?? '';
+      String createdPlantId = widget.qrId; // fallback
       try {
-        await _db.createPlant(
+        final createdPlant = await _db.createPlant(
           species: widget.plantName,
           guardianId: userId,
           lat: lat,
           lng: lng,
           imageUrl: imageUrl ?? photo.path,
           nickname: widget.plantType,
-          plantId: widget.qrId,
+          driveId: widget.communityId, // link plant to community
         );
+        createdPlantId = createdPlant.id;
+
+        // Keep community plant count in sync
+        try {
+          await _db.incrementCommunityPlantCount(widget.communityId);
+        } catch (e) {
+          debugPrint('Increment community plant count failed: $e');
+        }
       } catch (e) {
         debugPrint('Plant creation failed: $e');
       }
 
-      // 5. Create activity log
+      // 5. Create activity log — use the plant's Appwrite $id so admin history works
       try {
-        String? proofId;
-        try {
-          proofId = await _db.uploadPlantImage(photo.path);
-        } catch (_) {}
         await _db.createActivityLog(
           userId: userId,
-          plantId: widget.qrId,
+          plantId: createdPlantId,
           actionType: 'register',
           coinsAwarded: 10,
           verificationStatus: 'verified',
-          proofImageId: proofId ?? '',
+          proofImageId: uploadedFileId ?? '',
         );
       } catch (e) {
         debugPrint('Activity log failed: $e');
@@ -1555,38 +1573,45 @@ class _ScanCommunityQRDialogState extends State<_ScanCommunityQRDialog> {
 
       // 6. Auto-join community if not already a member
       String joinMsg = '';
-      if (!_alreadyMember && userId.isNotEmpty) {
+      if (userId.isNotEmpty) {
         try {
-          await _db.addCommunityMember(
+          final newlyJoined = await _db.safeJoinCommunity(
             communityId: widget.communityId,
             userId: userId,
             role: 'member',
           );
-          await _db.incrementCommunityMemberCount(widget.communityId);
-          joinMsg = 'You have been added to $_communityName!';
-          _alreadyMember = true;
+          if (newlyJoined) {
+            joinMsg = 'You have been added to $_communityName!';
+            _alreadyMember = true;
+          } else {
+            joinMsg = 'Plant registered in $_communityName.';
+          }
         } catch (e) {
           debugPrint('Auto-join failed: $e');
           joinMsg = 'Planted successfully, but could not join community.';
         }
-      } else if (_alreadyMember) {
-        joinMsg = 'Plant registered in $_communityName.';
       }
 
-      // 7. Add community to the Community tab (not My Garden)
+      // 7. Add community to the Community tab and reload memberships
       final communityCtrl =
           Provider.of<CommunityController>(context, listen: false);
-      // Fetch fresh community data and add to in-memory list
       try {
         final freshCommunity = await _db.getCommunity(widget.communityId);
         if (freshCommunity != null) {
           communityCtrl.addCommunityLocally(freshCommunity);
         }
-      } catch (_) {
-        // Non-critical — community will appear on next app launch
+      } catch (_) {}
+
+      // Reload memberships from DB so community persists after restart
+      if (userId.isNotEmpty) {
+        try {
+          await communityCtrl.loadUserCommunities(userId);
+        } catch (e) {
+          debugPrint('loadUserCommunities failed after join: $e');
+        }
       }
 
-      // Also add a CommunityPlant record so it shows inside the community
+      // Add plant to community in-memory list
       communityCtrl.addPlantToCommunity(CommunityPlant(
         id: widget.qrId,
         communityId: widget.communityId,

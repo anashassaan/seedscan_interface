@@ -286,6 +286,7 @@ class _PeriodChip extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════
 // 1) OVERVIEW TAB (Not used anymore - kept for reference)
 // ═══════════════════════════════════════════════════════════════
+// ignore: unused_element
 class _OverviewTab extends StatelessWidget {
   final AdminController admin;
   final String period;
@@ -547,6 +548,7 @@ class _UsersTab extends StatelessWidget {
   final String period;
   const _UsersTab({required this.admin, required this.period});
 
+  // ignore: unused_element
   double get _periodMultiplier {
     switch (period) {
       case 'Today':
@@ -596,13 +598,48 @@ class _UsersTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final users = admin.allUsers;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
 
-    // Compute metrics based on period
-    final totalCoins = users.fold<int>(0, (s, u) => s + u.totalCoins);
-    final activeToday =
-        0; // Will be computed from real session data when available
+    // Active Today: users with at least one activity stat dated today
+    final activeToday = users
+        .where((u) => u.stats.any((s) {
+              final d = s.date;
+              return d != null &&
+                  d.year == today.year &&
+                  d.month == today.month &&
+                  d.day == today.day;
+            }))
+        .length;
+
+    // Avg Session: average activity count per user (total stats / total users)
+    final totalStats = users.fold<int>(0, (s, u) => s + u.stats.length);
+    final avgSession = users.isEmpty
+        ? '—'
+        : '${(totalStats / users.length).toStringAsFixed(1)}';
+
+    // New registrations in the selected period
+    DateTime periodStart;
+    switch (period) {
+      case 'Today':
+        periodStart = today;
+        break;
+      case 'This Week':
+        periodStart = today.subtract(Duration(days: today.weekday - 1));
+        break;
+      case 'This Month':
+        periodStart = DateTime(today.year, today.month, 1);
+        break;
+      case 'All Time':
+      default:
+        periodStart = DateTime(2000);
+        break;
+    }
     final newInPeriod =
-        0; // Will be computed from real registration dates when available
+        users.where((u) => !u.createdAt.isBefore(periodStart)).length;
+
+    // Compute per-period registration counts for growth chart
+    final totalCoins = users.fold<int>(0, (s, u) => s + u.totalCoins);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
@@ -644,7 +681,7 @@ class _UsersTab extends StatelessWidget {
               child: _statCard(cs,
                   icon: LucideIcons.clock,
                   title: 'Avg Session',
-                  value: '—',
+                  value: avgSession,
                   color: const Color(0xFF00897B)),
             ),
           ],
@@ -759,6 +796,7 @@ class _UsersTab extends StatelessWidget {
     );
   }
 
+  // ignore: unused_element
   Widget _topEarnersList(ColorScheme cs, List<AppUser> users) {
     final sorted = [...users]
       ..sort((a, b) => b.totalCoins.compareTo(a.totalCoins));
@@ -964,7 +1002,49 @@ class _UsersTab extends StatelessWidget {
   }
 
   List<double> _generateGrowthData(int count) {
-    return List.generate(count, (_) => 0.0);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final users = admin.allUsers;
+    final result = List<double>.filled(count, 0);
+
+    for (final u in users) {
+      int bucket;
+      switch (period) {
+        case 'Today':
+          if (u.createdAt.year == today.year &&
+              u.createdAt.month == today.month &&
+              u.createdAt.day == today.day) {
+            bucket = (u.createdAt.hour ~/ 3).clamp(0, count - 1);
+            result[bucket]++;
+          }
+          break;
+        case 'This Week':
+          final weekStart = today.subtract(Duration(days: today.weekday - 1));
+          if (!u.createdAt.isBefore(weekStart)) {
+            bucket = (u.createdAt.weekday - 1).clamp(0, count - 1);
+            result[bucket]++;
+          }
+          break;
+        case 'This Month':
+          if (u.createdAt.year == today.year &&
+              u.createdAt.month == today.month) {
+            bucket = ((u.createdAt.day - 1) ~/ 7).clamp(0, count - 1);
+            result[bucket]++;
+          }
+          break;
+        case 'All Time':
+        default:
+          for (int i = 0; i < count; i++) {
+            final m = DateTime(today.year, today.month - (count - 1) + i);
+            if (u.createdAt.year == m.year && u.createdAt.month == m.month) {
+              result[i]++;
+              break;
+            }
+          }
+          break;
+      }
+    }
+    return result;
   }
 }
 
@@ -976,19 +1056,29 @@ class _CoinsTab extends StatelessWidget {
   final String period;
   const _CoinsTab({required this.admin, required this.period});
 
-  double get _periodMultiplier {
+  /// Returns the start DateTime for the current period, or null for All Time.
+  DateTime? get _periodStart {
+    final now = DateTime.now();
     switch (period) {
       case 'Today':
-        return 0.15;
+        return DateTime(now.year, now.month, now.day);
       case 'This Week':
-        return 1.0;
+        final ws = now.subtract(Duration(days: now.weekday - 1));
+        return DateTime(ws.year, ws.month, ws.day);
       case 'This Month':
-        return 4.0;
-      case 'All Time':
-        return 12.0;
+        return DateTime(now.year, now.month, 1);
       default:
-        return 1.0;
+        return null; // All Time
     }
+  }
+
+  /// Sum of coins earned by [user] within the current period.
+  int _userCoinsInPeriod(AppUser user) {
+    final start = _periodStart;
+    if (start == null) return user.totalCoins;
+    return user.stats
+        .where((s) => s.date != null && !s.date!.isBefore(start))
+        .fold<int>(0, (sum, s) => sum + (s.coinsEarned ?? 0));
   }
 
   int get _chartBarCount {
@@ -1026,21 +1116,18 @@ class _CoinsTab extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final users = admin.allUsers;
 
-    // Compute coin metrics based on period
-    final totalCoins =
-        (users.fold<int>(0, (s, u) => s + u.totalCoins) * _periodMultiplier)
-            .round();
+    // Compute period-filtered coin metrics from real activity data
+    final userCoinsList = users.map(_userCoinsInPeriod).toList();
+    final totalCoins = userCoinsList.fold<int>(0, (s, c) => s + c);
     final avgCoinsPerUser =
-        admin.totalUsers > 0 ? (totalCoins / admin.totalUsers).round() : 0;
-    final maxCoins = users.isEmpty
+        users.isNotEmpty ? (totalCoins / users.length).round() : 0;
+    final maxCoins = userCoinsList.isEmpty
         ? 0
-        : (users.map((u) => u.totalCoins).reduce((a, b) => a > b ? a : b) *
-                _periodMultiplier)
-            .round();
+        : userCoinsList.reduce((a, b) => a > b ? a : b);
 
-    // Get top earners
+    // Top earners sorted by period-filtered coins
     final sortedUsers = List<AppUser>.from(users)
-      ..sort((a, b) => b.totalCoins.compareTo(a.totalCoins));
+      ..sort((a, b) => _userCoinsInPeriod(b).compareTo(_userCoinsInPeriod(a)));
     final topEarners = sortedUsers.take(5).toList();
 
     return ListView(
@@ -1150,7 +1237,7 @@ class _CoinsTab extends StatelessWidget {
                       const Icon(LucideIcons.coins,
                           size: 14, color: Color(0xFFFF8F00)),
                       const SizedBox(width: 4),
-                      Text('${user.totalCoins}',
+                      Text('${_userCoinsInPeriod(user)}',
                           style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               color: Color(0xFFFF8F00))),
@@ -1239,13 +1326,65 @@ class _CoinsTab extends StatelessWidget {
   }
 
   List<double> _generateCoinData(int count) {
-    return List.generate(count, (_) => 0.0);
+    final now = DateTime.now();
+    final allStats = admin.allUsers.expand((u) => u.stats).toList();
+
+    if (period == 'Today') {
+      final today = DateTime(now.year, now.month, now.day);
+      return List.generate(count, (i) {
+        final start = today.add(Duration(hours: i * 4));
+        final end = start.add(const Duration(hours: 4));
+        return allStats
+            .where((s) =>
+                s.date != null &&
+                !s.date!.isBefore(start) &&
+                s.date!.isBefore(end))
+            .fold<double>(0, (sum, s) => sum + (s.coinsEarned ?? 0));
+      });
+    } else if (period == 'This Week') {
+      final ws = now.subtract(Duration(days: now.weekday - 1));
+      final weekStart = DateTime(ws.year, ws.month, ws.day);
+      return List.generate(count, (i) {
+        final day = weekStart.add(Duration(days: i));
+        return allStats
+            .where((s) =>
+                s.date != null &&
+                s.date!.year == day.year &&
+                s.date!.month == day.month &&
+                s.date!.day == day.day)
+            .fold<double>(0, (sum, s) => sum + (s.coinsEarned ?? 0));
+      });
+    } else if (period == 'This Month') {
+      final monthStart = DateTime(now.year, now.month, 1);
+      return List.generate(count, (i) {
+        final start = monthStart.add(Duration(days: i * 7));
+        final end = start.add(const Duration(days: 7));
+        return allStats
+            .where((s) =>
+                s.date != null &&
+                !s.date!.isBefore(start) &&
+                s.date!.isBefore(end))
+            .fold<double>(0, (sum, s) => sum + (s.coinsEarned ?? 0));
+      });
+    } else {
+      // All Time: 6 rolling months
+      return List.generate(count, (i) {
+        final month = DateTime(now.year, now.month - (count - 1 - i), 1);
+        return allStats
+            .where((s) =>
+                s.date != null &&
+                s.date!.year == month.year &&
+                s.date!.month == month.month)
+            .fold<double>(0, (sum, s) => sum + (s.coinsEarned ?? 0));
+      });
+    }
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
 // 4) ENVIRONMENT TAB (kept for reference)
 // ═══════════════════════════════════════════════════════════════
+// ignore: unused_element
 class _EnvironmentTab extends StatelessWidget {
   final AdminController admin;
   const _EnvironmentTab({required this.admin});
@@ -1786,7 +1925,23 @@ class _ChartCard extends StatelessWidget {
       case 'This Month':
         return ['W1', 'W2', 'W3', 'W4'];
       case 'All Time':
-        return ['Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb'];
+        const abbr = [
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec'
+        ];
+        final now = DateTime.now();
+        return List.generate(
+            6, (i) => abbr[DateTime(now.year, now.month - 5 + i).month - 1]);
       default:
         return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     }
