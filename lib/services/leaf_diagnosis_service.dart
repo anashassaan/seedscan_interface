@@ -1,14 +1,12 @@
 import 'dart:io';
 import 'dart:math';
 import 'package:image/image.dart' as img;
-import 'disease_classifier_service.dart';
+import 'apple_detection_service.dart';
 
-/// Two-stage leaf diagnosis pipeline:
-///   Stage 1 — Apple leaf detection   (binary_model.tflite)
-///   Stage 2 — Disease classification (mobilenetv3_apple_disease.tflite)
-///
-/// Includes optional preprocessing (gamma correction + colour enhancement)
-/// shown to be critical for real-world accuracy.
+/// Binary-only leaf diagnosis pipeline (test mode).
+/// Stage 1 — Apple leaf detection (binary_model.tflite).
+/// Stage 2 (MobileNetV3 disease classification) is disabled until Stage 1
+/// results are satisfactory.
 class LeafDiagnosisService {
   final double detectionThreshold;
   final double fallbackDetectionThreshold;
@@ -36,16 +34,14 @@ class LeafDiagnosisService {
   //  Model lifecycle
   // ---------------------------------------------------------------
 
-  /// Load the MobileNetV3 disease classifier model.
+  /// Load the binary detection model.
   Future<void> loadModels() async {
     if (_modelsLoaded) return;
 
-    print('🔄 Loading disease-detection model …');
-
-    await DiseaseClassifierService.loadModel();
-
+    print('🔄 Loading binary detection model …');
+    await AppleDetectionService.loadModel();
     _modelsLoaded = true;
-    print('✅ Disease classifier model loaded successfully');
+    print('✅ Binary model loaded successfully');
   }
 
   // ---------------------------------------------------------------
@@ -55,16 +51,16 @@ class LeafDiagnosisService {
   /// Run the full prediction pipeline on [imageFile].
   ///
   /// Returns a map with keys:
-  ///   `result`     — human-readable summary
-  ///   `disease`    — disease class name or 'N/A'
-  ///   `confidence` — 0.0 – 1.0
-  ///   `severity`   — 1 – 5  (null when not applicable)
-  ///   `isApple`    — whether the image was identified as an apple leaf
+  ///   `result`     — 'Apple Leaf Detected' or 'Not an Apple Leaf'
+  ///   `disease`    — 'N/A' (classifier not yet active)
+  ///   `confidence` — 0.0 – 1.0 (binary model score)
+  ///   `severity`   — null
+  ///   `isApple`    — true / false
   Future<Map<String, dynamic>> predict(File imageFile) async {
     try {
       if (!_modelsLoaded) await loadModels();
 
-      // ── Decode image ──────────────────────────────────────────
+      // ── Decode image ─────────────────────────────────────────
       final bytes = await imageFile.readAsBytes();
       final decoded = img.decodeImage(bytes);
 
@@ -75,34 +71,25 @@ class LeafDiagnosisService {
       // Handle EXIF orientation
       final oriented = img.bakeOrientation(decoded);
 
-      // ── Preprocessing (optional) ──────────────────────────────
-      img.Image processedImage;
-      if (enablePreprocessing) {
-        print('🔧 Applying preprocessing (gamma + colour enhancement) …');
-        processedImage = _preprocessImage(img.Image.from(oriented));
-      } else {
-        processedImage = oriented;
-      }
+      // Preprocessing is handled inside AppleDetectionService._smartPreprocess
+      // (gamma γ=1.2 + CLAHE) — do NOT apply again here.
 
-      // ── Disease classification (MobileNetV3) ─────────────────
-      print('🔬 Classifying disease …');
-      final result = await DiseaseClassifierService.classify(processedImage);
+      // ── Stage 1: Binary detection ────────────────────────────
+      print('🔬 Running binary model …');
+      final detection =
+          await AppleDetectionService.isAppleLeafWithScore(oriented);
+      final bool isApple = detection['isApple'] as bool;
+      final double appleScore = (detection['appleScore'] as double?) ?? 0.0;
 
-      final disease = result['disease'] as String;
-      final confidence = (result['confidence'] as num).toDouble();
-      final severity = result['severity'] as int;
-
-      final String resultText =
-          disease == 'Healthy' ? 'Healthy Leaf' : 'Disease Detected: $disease';
-
-      print('📊 Result: $disease (${(confidence * 100).toStringAsFixed(1)}%)');
+      final resultText = isApple ? 'Apple Leaf Detected' : 'Not an Apple Leaf';
+      print('📊 Binary result: $resultText  (score=$appleScore)');
 
       return {
         'result': resultText,
-        'disease': disease,
-        'confidence': confidence,
-        'severity': severity,
-        'isApple': true,
+        'disease': 'N/A',
+        'confidence': appleScore,
+        'severity': null,
+        'isApple': isApple,
       };
     } catch (e) {
       print('❌ Prediction error: $e');
@@ -240,6 +227,6 @@ class LeafDiagnosisService {
   }
 
   void dispose() {
-    DiseaseClassifierService.dispose();
+    AppleDetectionService.dispose();
   }
 }

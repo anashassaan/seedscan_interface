@@ -193,22 +193,9 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
       if (mounted) {
         setState(() {
           classificationResult = result['result'];
-
-          // If the pipeline determined this is NOT an apple leaf,
-          // make sure we do NOT display disease/severity info.
-          final bool noApple = (result['result'] == 'No Apple Leaf Detected') ||
-              (result['disease'] == 'N/A');
-
-          if (noApple) {
-            diseaseName = 'N/A';
-            confidenceLevel = 0.0;
-            severityLevel = null; // null prevents severity UI from showing
-          } else {
-            diseaseName = result['disease'];
-            confidenceLevel = result['confidence'];
-            severityLevel = result['severity'];
-          }
-
+          diseaseName = result['disease'];
+          confidenceLevel = (result['confidence'] as num?)?.toDouble() ?? 0.0;
+          severityLevel = result['severity'];
           isLoading = false;
         });
       }
@@ -310,20 +297,9 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
       if (mounted) {
         setState(() {
           classificationResult = result['result'];
-
-          final bool noApple = (result['result'] == 'No Apple Leaf Detected') ||
-              (result['disease'] == 'N/A');
-
-          if (noApple) {
-            diseaseName = 'N/A';
-            confidenceLevel = 0.0;
-            severityLevel = null;
-          } else {
-            diseaseName = result['disease'];
-            confidenceLevel = result['confidence'];
-            severityLevel = result['severity'];
-          }
-
+          diseaseName = result['disease'];
+          confidenceLevel = (result['confidence'] as num?)?.toDouble() ?? 0.0;
+          severityLevel = result['severity'];
           isLoading = false;
         });
       }
@@ -891,222 +867,166 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
     );
   }
 
+  // ─── TEMPORARY BINARY TEST DISPLAY ────────────────────────────────────────
+  // Shows only Apple / Not-Apple result from the binary classifier.
+  // Replace this with the full disease detection UI once the model pipeline
+  // is verified end-to-end.
   Widget _buildResultsOverlay(
       ColorScheme cs, double screenWidth, double screenHeight) {
+    final bool isApple = classificationResult == 'Apple Leaf Detected';
+
     return Positioned.fill(
       child: Container(
-        color: Colors.black54,
+        color: Colors.black.withOpacity(0.72),
         child: Center(
           child: Container(
-            margin: const EdgeInsets.all(24),
-            padding: const EdgeInsets.all(24),
-            constraints: BoxConstraints(maxHeight: screenHeight * 0.7),
+            margin: const EdgeInsets.symmetric(horizontal: 28),
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.25),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    diseaseName != 'N/A'
-                        ? Icons.warning_amber_rounded
-                        : Icons.check_circle,
-                    size: 60,
-                    color: diseaseName != 'N/A' ? Colors.orange : Colors.green,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // ── Test mode banner ──────────────────────────────────────
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.amber.shade400),
                   ),
-                  const SizedBox(height: 20),
-                  Text(
-                    classificationResult!,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (diseaseName != null && diseaseName != 'N/A') ...[
-                    const SizedBox(height: 24),
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Detected Disease',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey,
-                              fontWeight: FontWeight.w600,
-                            ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.science_outlined,
+                          size: 14, color: Colors.amber.shade800),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          'BINARY TEST MODE — Apple Detector Only',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.amber.shade900,
+                            letterSpacing: 0.3,
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            diseaseName!,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              const Text('Confidence: '),
-                              Text(
-                                '${((confidenceLevel ?? 0) * 100).toStringAsFixed(1)}%',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: cs.primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (severityLevel != null) ...[
-                      const SizedBox(height: 20),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Severity Level',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          LinearProgressIndicator(
-                            value: severityLevel! / 5,
-                            backgroundColor: Colors.grey[200],
-                            color: severityLevel! <= 2
-                                ? Colors.green
-                                : severityLevel! <= 3
-                                    ? Colors.orange
-                                    : Colors.red,
-                            minHeight: 10,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _getSeverityName(severityLevel!),
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.bold,
-                              color: severityLevel! <= 2
-                                  ? Colors.green
-                                  : severityLevel! <= 3
-                                      ? Colors.orange
-                                      : Colors.red,
-                            ),
-                          ),
-                        ],
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
-                  ],
-                  const SizedBox(height: 28),
+                  ),
+                ),
+                const SizedBox(height: 28),
 
-                  // AI Consultation Button (only for diseases)
-                  if (diseaseName != null && diseaseName != 'N/A')
-                    Column(
-                      children: [
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () async {
-                              // Prepare diagnosis report
-                              final diagnosisReport =
-                                  '🌿 Disease Diagnosis Report\n\n'
-                                  '📋 Disease: $diseaseName\n'
-                                  '⚠️ Severity: ${_getSeverityName(severityLevel ?? 0)}\n'
-                                  '📊 Confidence: ${((confidenceLevel ?? 0) * 100).toStringAsFixed(1)}%\n\n'
-                                  'Please provide treatment recommendations.';
+                // ── Result icon ───────────────────────────────────────────
+                Container(
+                  width: 90,
+                  height: 90,
+                  decoration: BoxDecoration(
+                    color: isApple ? Colors.green.shade50 : Colors.red.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isApple ? Icons.check_circle : Icons.cancel,
+                    size: 56,
+                    color:
+                        isApple ? Colors.green.shade600 : Colors.red.shade500,
+                  ),
+                ),
+                const SizedBox(height: 20),
 
-                              // Send diagnosis to chat
-                              final chatController =
-                                  Provider.of<ChatController>(context,
-                                      listen: false);
-                              await chatController.sendText(diagnosisReport);
+                // ── Main result label ─────────────────────────────────────
+                Text(
+                  isApple ? '🍎 Apple Leaf' : '❌ Not Apple Leaf',
+                  style: TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    color:
+                        isApple ? Colors.green.shade700 : Colors.red.shade600,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  classificationResult ?? '',
+                  style: const TextStyle(fontSize: 14, color: Colors.black54),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
 
-                              // Clear results to hide overlay
-                              if (mounted) {
-                                setState(() {
-                                  classificationResult = null;
-                                  diseaseName = null;
-                                  severityLevel = null;
-                                  confidenceLevel = null;
-                                });
-
-                                // Show success message
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                        '✅ Diagnosis sent! Go to Chat tab to see AI response.'),
-                                    duration: Duration(seconds: 4),
-                                    backgroundColor: Color(0xFF00C853),
-                                  ),
-                                );
-                              }
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF00C853),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            icon:
-                                const Icon(Icons.chat_bubble_outline, size: 20),
-                            label: const Text(
-                              'Consult SeedScan AI',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-                    ),
-
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        setState(() {
-                          classificationResult = null;
-                          diseaseName = null;
-                          severityLevel = null;
-                          confidenceLevel = null;
-                        });
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: cs.primary,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                // ── Debug confidence value ────────────────────────────────
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'confidence: ${((confidenceLevel ?? 0) * 100).toStringAsFixed(4)}%',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontFamily: 'monospace',
+                          color: Colors.black54,
                         ),
                       ),
-                      child: const Text(
-                        'Scan Another Leaf',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                      Text(
+                        'raw score: ${(confidenceLevel ?? 0).toStringAsFixed(6)}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontFamily: 'monospace',
+                          color: Colors.black38,
                         ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 28),
+
+                // ── Scan again button ─────────────────────────────────────
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        classificationResult = null;
+                        diseaseName = null;
+                        severityLevel = null;
+                        confidenceLevel = null;
+                      });
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: cs.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    icon: const Icon(Icons.camera_alt_outlined, size: 20),
+                    label: const Text(
+                      'Scan Again',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
