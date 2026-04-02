@@ -17,7 +17,9 @@ import '../../../services/leaf_diagnosis_service.dart';
 import 'custom_camera_screen.dart';
 
 class UnifiedScanScreen extends StatefulWidget {
-  const UnifiedScanScreen({super.key});
+  final VoidCallback? onNavigateToChat;
+
+  const UnifiedScanScreen({super.key, this.onNavigateToChat});
 
   @override
   State<UnifiedScanScreen> createState() => _UnifiedScanScreenState();
@@ -867,10 +869,6 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
     );
   }
 
-  // ─── TEMPORARY BINARY TEST DISPLAY ────────────────────────────────────────
-  // Shows only Apple / Not-Apple result from the binary classifier.
-  // Replace this with the full disease detection UI once the model pipeline
-  // is verified end-to-end.
   Widget _buildResultsOverlay(
       ColorScheme cs, double screenWidth, double screenHeight) {
     final bool isApple = classificationResult == 'Apple Leaf Detected';
@@ -896,52 +894,41 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // ── Test mode banner ──────────────────────────────────────
-                Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.amber.shade400),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.science_outlined,
-                          size: 14, color: Colors.amber.shade800),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          'BINARY TEST MODE — Apple Detector Only',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.amber.shade900,
-                            letterSpacing: 0.3,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 10),
 
                 // ── Result icon ───────────────────────────────────────────
                 Container(
                   width: 90,
                   height: 90,
                   decoration: BoxDecoration(
-                    color: isApple ? Colors.green.shade50 : Colors.red.shade50,
+                    color: isApple
+                        ? (diseaseName != null &&
+                                diseaseName != 'Healthy' &&
+                                diseaseName != 'N/A' &&
+                                diseaseName != 'Unknown'
+                            ? Colors.orange.shade50
+                            : Colors.green.shade50)
+                        : Colors.red.shade50,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    isApple ? Icons.check_circle : Icons.cancel,
+                    !isApple
+                        ? Icons.cancel
+                        : (diseaseName != null &&
+                                diseaseName != 'Healthy' &&
+                                diseaseName != 'N/A' &&
+                                diseaseName != 'Unknown'
+                            ? Icons.warning_amber_rounded
+                            : Icons.check_circle),
                     size: 56,
-                    color:
-                        isApple ? Colors.green.shade600 : Colors.red.shade500,
+                    color: !isApple
+                        ? Colors.red.shade500
+                        : (diseaseName != null &&
+                                diseaseName != 'Healthy' &&
+                                diseaseName != 'N/A' &&
+                                diseaseName != 'Unknown'
+                            ? Colors.orange.shade600
+                            : Colors.green.shade600),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -958,43 +945,100 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
-                Text(
-                  classificationResult ?? '',
-                  style: const TextStyle(fontSize: 14, color: Colors.black54),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
 
-                // ── Debug confidence value ────────────────────────────────
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        'confidence: ${((confidenceLevel ?? 0) * 100).toStringAsFixed(4)}%',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontFamily: 'monospace',
-                          color: Colors.black54,
-                        ),
+                if (isApple && diseaseName != null && diseaseName != 'N/A') ...[
+                  Container(
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: diseaseName == 'Healthy'
+                          ? Colors.green.shade50
+                          : Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: diseaseName == 'Healthy'
+                            ? Colors.green.shade200
+                            : Colors.orange.shade200,
                       ),
-                      Text(
-                        'raw score: ${(confidenceLevel ?? 0).toStringAsFixed(6)}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontFamily: 'monospace',
-                          color: Colors.black38,
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Diagnosis: $diseaseName',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: diseaseName == 'Healthy'
+                                ? Colors.green.shade800
+                                : Colors.orange.shade900,
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 4),
+                        Text(
+                          'Confidence: ${((confidenceLevel ?? 0) * 100).toStringAsFixed(1)}%',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: diseaseName == 'Healthy'
+                                ? Colors.green.shade700
+                                : Colors.orange.shade800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                ] else ...[
+                  Text(
+                    classificationResult ?? '',
+                    style: const TextStyle(fontSize: 14, color: Colors.black54),
+                    textAlign: TextAlign.center,
                   ),
-                ),
+                ],
                 const SizedBox(height: 28),
+
+                if (isApple && diseaseName != null && diseaseName != 'N/A') ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        // Pass info to chat and navigate
+                        final chatCtrl =
+                            Provider.of<ChatController>(context, listen: false);
+                        chatCtrl.sendText(
+                            'I scanned an apple leaf and it was diagnosed with $diseaseName (Confidence: ${((confidenceLevel ?? 0) * 100).toStringAsFixed(1)}%). What should I do for this?');
+
+                        if (widget.onNavigateToChat != null) {
+                          widget.onNavigateToChat!();
+                        }
+
+                        setState(() {
+                          classificationResult = null;
+                          diseaseName = null;
+                          severityLevel = null;
+                          confidenceLevel = null;
+                        });
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade600,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      icon: const Icon(Icons.chat_bubble_outline, size: 20),
+                      label: const Text(
+                        'Consult Seed Scan AI',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
 
                 // ── Scan again button ─────────────────────────────────────
                 SizedBox(

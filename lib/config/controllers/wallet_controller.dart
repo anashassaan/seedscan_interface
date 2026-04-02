@@ -1,56 +1,76 @@
 // lib/controllers/wallet_controller.dart
 import 'package:flutter/material.dart';
+import '../../services/database_service.dart';
+import '../../models/transaction_model.dart' as tm;
 
 class WalletController extends ChangeNotifier {
-  int _points = 1250;
-  final List<Transaction> _transactions = [];
+  int _points = 0;
+  List<Transaction> _transactions = [];
+  bool _isLoading = false;
+  String? _userId;
+
+  final DatabaseService _db = DatabaseService();
 
   int get points => _points;
   List<Transaction> get transactions => List.unmodifiable(_transactions);
+  bool get isLoading => _isLoading;
 
-  WalletController() {
-    // Initialize with some sample transactions
-    _transactions.addAll([
-      Transaction(
-        id: 't1',
-        type: TransactionType.earn,
-        amount: 50,
-        description: 'Watered Golden Pothos',
-        timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-      ),
-      Transaction(
-        id: 't2',
-        type: TransactionType.earn,
-        amount: 100,
-        description: 'Completed Disease Scan',
-        timestamp: DateTime.now().subtract(const Duration(hours: 5)),
-      ),
-      Transaction(
-        id: 't3',
-        type: TransactionType.earn,
-        amount: 25,
-        description: 'Daily Login Bonus',
-        timestamp: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-      Transaction(
-        id: 't4',
-        type: TransactionType.spend,
-        amount: 200,
-        description: 'Redeemed Gift Card',
-        timestamp: DateTime.now().subtract(const Duration(days: 2)),
-      ),
-      Transaction(
-        id: 't5',
-        type: TransactionType.earn,
-        amount: 75,
-        description: 'Fertilized Mango Tree',
-        timestamp: DateTime.now().subtract(const Duration(days: 3)),
-      ),
-    ]);
+  WalletController();
+
+  Future<void> fetchWalletData(String userId) async {
+    _userId = userId;
+    _isLoading = true;
+    notifyListeners();
+
+    try {
+      // Fetch user profile for balance
+      final profile = await _db.getUserProfile(userId);
+      if (profile != null) {
+        _points = profile.walletBalance;
+      }
+
+      // Fetch activity logs
+      final logs = await _db.listUserActivityLogs(userId);
+      _transactions = logs.map((log) {
+        final amount = log.coinsAwarded.abs();
+        // Assuming action rules. Adjust if necessary:
+        final isSpend = log.actionType.toLowerCase().contains('redeem') ||
+            log.coinsAwarded < 0 ||
+            log.actionType.toLowerCase().contains('spend');
+        return Transaction(
+          id: log.id,
+          type: isSpend ? TransactionType.spend : TransactionType.earn,
+          amount: amount,
+          description: _formatActionType(log.actionType),
+          timestamp: log.createdAt,
+        );
+      }).toList();
+
+      // Sort by newest first
+      _transactions.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    } catch (e) {
+      debugPrint('Error fetching wallet data: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  String _formatActionType(String type) {
+    if (type.isEmpty) return 'Activity';
+    if (type == 'scan_disease') return 'Completed Disease Scan';
+    return type
+        .split('_')
+        .map((word) => word.substring(0, 1).toUpperCase() + word.substring(1))
+        .join(' ');
   }
 
   // Earn points for completing tasks
-  void earnPoints(int amount, String description) {
+  Future<void> earnPoints(int amount, String description,
+      {String actionType = 'task_completed', String plantId = 'system'}) async {
+    if (_userId == null) return;
+
+    // Update locally immediately for responsiveness
     _points += amount;
     _transactions.insert(
       0,
@@ -63,13 +83,32 @@ class WalletController extends ChangeNotifier {
       ),
     );
     notifyListeners();
+
+    try {
+      // 1. Log activity
+      await _db.createActivityLog(
+        userId: _userId!,
+        plantId: plantId,
+        actionType: actionType,
+        coinsAwarded: amount,
+        verificationStatus: 'verified',
+        proofImageId: 'none',
+      );
+      // 2. Update user profile
+      await _db.updateUserProfile(_userId!, {
+        'wallet_balance': _points,
+      });
+    } catch (e) {
+      debugPrint('Error persisting earn points: $e');
+    }
   }
 
   // Spend/withdraw points
-  bool spendPoints(int amount, String description) {
-    if (_points < amount) {
-      return false; // Insufficient balance
+  Future<bool> spendPoints(int amount, String description) async {
+    if (_userId == null || _points < amount) {
+      return false; // Insufficient balance or not initialized
     }
+
     _points -= amount;
     _transactions.insert(
       0,
@@ -82,6 +121,25 @@ class WalletController extends ChangeNotifier {
       ),
     );
     notifyListeners();
+
+    try {
+      // 1. Log activity
+      await _db.createActivityLog(
+        userId: _userId!,
+        plantId: 'system',
+        actionType: 'redeemed_points',
+        coinsAwarded: -amount,
+        verificationStatus: 'verified',
+        proofImageId: 'none',
+      );
+      // 2. Update user profile
+      await _db.updateUserProfile(_userId!, {
+        'wallet_balance': _points,
+      });
+    } catch (e) {
+      debugPrint('Error persisting spend points: $e');
+    }
+
     return true;
   }
 

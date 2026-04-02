@@ -2,11 +2,11 @@ import 'dart:io';
 import 'dart:math';
 import 'package:image/image.dart' as img;
 import 'apple_detection_service.dart';
+import 'disease_classifier_service.dart';
 
 /// Binary-only leaf diagnosis pipeline (test mode).
 /// Stage 1 — Apple leaf detection (binary_model.tflite).
-/// Stage 2 (MobileNetV3 disease classification) is disabled until Stage 1
-/// results are satisfactory.
+/// Stage 2 (MobileNetV3 disease classification) is now enabled for apple leaves!
 class LeafDiagnosisService {
   final double detectionThreshold;
   final double fallbackDetectionThreshold;
@@ -34,14 +34,16 @@ class LeafDiagnosisService {
   //  Model lifecycle
   // ---------------------------------------------------------------
 
-  /// Load the binary detection model.
+  /// Load the binary detection model and disease classifier model.
   Future<void> loadModels() async {
     if (_modelsLoaded) return;
 
     print('🔄 Loading binary detection model …');
     await AppleDetectionService.loadModel();
+    print('🔄 Loading disease classification model …');
+    await DiseaseClassifierService.loadModel();
     _modelsLoaded = true;
-    print('✅ Binary model loaded successfully');
+    print('✅ Models loaded successfully');
   }
 
   // ---------------------------------------------------------------
@@ -52,8 +54,8 @@ class LeafDiagnosisService {
   ///
   /// Returns a map with keys:
   ///   `result`     — 'Apple Leaf Detected' or 'Not an Apple Leaf'
-  ///   `disease`    — 'N/A' (classifier not yet active)
-  ///   `confidence` — 0.0 – 1.0 (binary model score)
+  ///   `disease`    — Disease class if apple leaf, else 'N/A'
+  ///   `confidence` — Disease classification score if apple leaf, else binary model score
   ///   `severity`   — null
   ///   `isApple`    — true / false
   Future<Map<String, dynamic>> predict(File imageFile) async {
@@ -84,10 +86,29 @@ class LeafDiagnosisService {
       final resultText = isApple ? 'Apple Leaf Detected' : 'Not an Apple Leaf';
       print('📊 Binary result: $resultText  (score=$appleScore)');
 
+      // ── Stage 2: Disease Classification (If Apple Leaf) ───────
+      String disease = 'N/A';
+      double? diseaseConfidence = appleScore;
+
+      if (isApple) {
+        print(
+            '🔬 Apple leaf detected. Running MobileNetV3 disease classifier...');
+        final classificationResult =
+            await DiseaseClassifierService.classify(oriented);
+
+        disease = classificationResult['disease'] as String? ?? 'Unknown';
+        // You might want to combine confidences or just use the disease classification's confidence:
+        diseaseConfidence =
+            (classificationResult['confidence'] as num?)?.toDouble() ??
+                appleScore;
+
+        print('📊 Classifier result: $disease  (score=$diseaseConfidence)');
+      }
+
       return {
         'result': resultText,
-        'disease': 'N/A',
-        'confidence': appleScore,
+        'disease': disease,
+        'confidence': diseaseConfidence,
         'severity': null,
         'isApple': isApple,
       };

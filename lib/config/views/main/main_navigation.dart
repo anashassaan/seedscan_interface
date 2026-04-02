@@ -20,7 +20,9 @@ class _MainNavigationState extends State<MainNavigation> {
     final screens = [
       HomeView(onNavigate: (i) => setState(() => index = i)),
       const PlantsView(),
-      const UnifiedScanScreen(),
+      UnifiedScanScreen(
+        onNavigateToChat: () => setState(() => index = 3),
+      ),
       const ChatScreen(),
       const ProfileView(),
     ];

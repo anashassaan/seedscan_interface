@@ -1064,9 +1064,11 @@ class _RedeemCard extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (walletController.points >= points) {
-                if (walletController.spendPoints(points, 'Redeemed $title')) {
+                final success = await walletController.spendPoints(
+                    points, 'Redeemed $title');
+                if (success) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(

@@ -121,12 +121,14 @@ class _EntryDeciderState extends State<EntryDecider> {
       final scanCtrl = Provider.of<ScanController>(context, listen: false);
       final notifCtrl =
           Provider.of<NotificationController>(context, listen: false);
+      final walletCtrl = Provider.of<WalletController>(context, listen: false);
       final uid = auth.userId ?? '';
       // Fire loads concurrently
       await Future.wait([
         communityCtrl.loadUserCommunities(uid),
         scanCtrl.loadMyPlants(uid),
         notifCtrl.initialize(uid),
+        walletCtrl.fetchWalletData(uid),
       ]);
     }
 
