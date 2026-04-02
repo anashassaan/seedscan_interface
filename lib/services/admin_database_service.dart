@@ -378,17 +378,40 @@ class AdminDatabaseService {
     required String title,
     required String body,
     String? senderId,
+    String? linkedPlantId,
   }) async {
     try {
       final members = await listCommunityMembers(communityId);
+
+      // If linkedPlantId provided, grab the plant details
+      String? pName;
+      String? pLoc;
+      double? pLat;
+      double? pLng;
+
+      if (linkedPlantId != null) {
+        final plant = await _db.getPlant(linkedPlantId);
+        if (plant != null) {
+          pName = plant.species;
+          pLoc = plant.nickname;
+          pLat = plant.locationLat;
+          pLng = plant.locationLong;
+        }
+      }
+
       for (final member in members) {
         await _db.createNotification(
           recipientId: member.userId,
-          type: 'system',
+          type: linkedPlantId != null ? 'watering' : 'system',
           title: title,
           body: body,
           senderId: senderId,
           linkedCommunityId: communityId,
+          linkedPlantId: linkedPlantId,
+          plantName: pName,
+          plantLocation: pLoc != null || pLat != null
+              ? '${pLoc ?? "Unknown"}|${pLat ?? 0.0},${pLng ?? 0.0}'
+              : null,
         );
       }
       return true;

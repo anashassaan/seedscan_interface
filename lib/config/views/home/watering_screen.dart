@@ -20,6 +20,52 @@ class WateringScreen extends StatefulWidget {
 
 class _WateringScreenState extends State<WateringScreen> {
   final ImagePicker _picker = ImagePicker();
+  Position? _currentPosition;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchInitialLocation();
+  }
+
+  Future<void> _fetchInitialLocation() async {
+    try {
+      final pos = await _getCurrentLocation(context);
+      if (mounted && pos != null) {
+        setState(() {
+          _currentPosition = pos;
+        });
+      }
+    } catch (e) {
+      debugPrint("Could not fetch location for distance: $e");
+    }
+  }
+
+  String _getDistanceText(NotificationModel notification) {
+    if (_currentPosition == null) {
+      if (notification.location.isNotEmpty) return notification.location;
+      return 'GPS Location Available';
+    }
+
+    if (notification.latitude == 0.0 && notification.longitude == 0.0) {
+      return notification.location.isNotEmpty
+          ? notification.location
+          : 'Location Unavailable';
+    }
+
+    final distanceInMeters = Geolocator.distanceBetween(
+      _currentPosition!.latitude,
+      _currentPosition!.longitude,
+      notification.latitude,
+      notification.longitude,
+    );
+
+    if (distanceInMeters < 1000) {
+      return '${distanceInMeters.toStringAsFixed(0)} m away';
+    } else {
+      return '${(distanceInMeters / 1000).toStringAsFixed(1)} km away';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -202,50 +248,148 @@ class _WateringScreenState extends State<WateringScreen> {
                               color: isOverdue
                                   ? Colors.red
                                   : cs.onSurface.withOpacity(0.6),
+                              fontWeight: isOverdue
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
                             ),
                           ),
-                          if (isOverdue) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.red.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                'OVERDUE',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.red,
-                                ),
-                              ),
-                            ),
-                          ],
                         ],
                       ),
                     ],
                   ),
                 ),
-                IconButton(
-                  onPressed: () => _showTaskVerificationDialog(
-                    context,
-                    notification,
-                    controller,
-                  ),
-                  icon: Icon(
-                    notification.isRead
-                        ? LucideIcons.checkCircle2
-                        : LucideIcons.circle,
-                    color: notification.isRead ? Colors.green : cs.outline,
-                  ),
-                  tooltip: 'Complete Task',
+                PopupMenuButton<String>(
+                  icon: const Icon(LucideIcons.moreVertical),
+                  onSelected: (value) {
+                    if (value == 'mark') {
+                      controller.markAsRead(notification.id);
+                    } else if (value == 'delete') {
+                      controller.removeNotification(notification.id);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'mark',
+                      child: Row(
+                        children: [
+                          Icon(
+                            notification.isRead
+                                ? LucideIcons.mailOpen
+                                : LucideIcons.mail,
+                            size: 18,
+                            color: cs.onSurface,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(notification.isRead
+                              ? 'Mark as unread'
+                              : 'Mark as read'),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(
+                            LucideIcons.trash2,
+                            size: 18,
+                            color: Colors.red,
+                          ),
+                          const SizedBox(width: 12),
+                          const Text('Delete',
+                              style: TextStyle(color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+
+            // Message
+            Text(
+              notification.message,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: cs.onSurface.withOpacity(0.8),
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // Location Info & Navigation
+            if (notification.location.isNotEmpty ||
+                (notification.latitude != 0.0 && notification.longitude != 0.0))
+              Container(
+                margin: const EdgeInsets.only(top: 8, bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: cs.primaryContainer.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.mapPin, size: 18, color: cs.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _getDistanceText(notification),
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: cs.onSurface,
+                        ),
+                      ),
+                    ),
+                    if (notification.latitude != 0.0 &&
+                        notification.longitude != 0.0)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
+                          backgroundColor: cs.primaryContainer,
+                          minimumSize: Size.zero,
+                        ),
+                        onPressed: () => _openMap(
+                            context,
+                            notification.latitude,
+                            notification.longitude,
+                            notification.plantName),
+                        icon: Icon(LucideIcons.navigation,
+                            size: 14, color: cs.primary),
+                        label: Text('Navigate',
+                            style: TextStyle(
+                                color: cs.primary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                  ],
+                ),
+              ),
+
+            if (!notification.isRead) ...[
+              if (notification.location.isEmpty && notification.latitude == 0.0)
+                const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    onPressed: () => _showTaskVerificationDialog(
+                      context,
+                      notification,
+                      controller,
+                    ),
+                    icon: Icon(
+                      notification.isRead
+                          ? LucideIcons.checkCircle2
+                          : LucideIcons.circle,
+                      color: notification.isRead ? Colors.green : cs.outline,
+                    ),
+                    tooltip: 'Complete Task',
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 12),
 
             // Message
@@ -354,7 +498,7 @@ class _WateringScreenState extends State<WateringScreen> {
 
     final cs = Theme.of(context).colorScheme;
     final scanController = Provider.of<ScanController>(context, listen: false);
-    
+
     // Find the plant associated with this notification
     final plant = scanController
         .getMyPlants()
@@ -518,8 +662,7 @@ class _WateringScreenState extends State<WateringScreen> {
                             } catch (e) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content:
-                                      Text('Error getting location: $e'),
+                                  content: Text('Error getting location: $e'),
                                   backgroundColor: Colors.red,
                                 ),
                               );
@@ -669,7 +812,8 @@ class _WateringScreenState extends State<WateringScreen> {
                 Navigator.of(dialogContext).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('${notification.plantName} task marked as done'),
+                    content:
+                        Text('${notification.plantName} task marked as done'),
                     backgroundColor: Colors.grey,
                   ),
                 );
@@ -689,7 +833,8 @@ class _WateringScreenState extends State<WateringScreen> {
                         context,
                         listen: false,
                       );
-                      wallet.earnPoints(50, 'Watered ${notification.plantName}');
+                      wallet.earnPoints(
+                          50, 'Watered ${notification.plantName}');
                       Navigator.of(dialogContext).pop();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(

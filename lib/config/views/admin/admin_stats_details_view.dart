@@ -208,33 +208,32 @@ class _AutoNotificationSenderPageState
                         final adminId = auth.userId ?? 'admin';
                         int sent = 0;
                         try {
-                          // Collect unique member IDs across all communities
-                          final memberIds = <String>{};
-                          for (var community in admin.communities) {
-                            for (var member in community.members) {
-                              if (member.id.isNotEmpty)
-                                memberIds.add(member.id);
-                            }
-                          }
-                          if (memberIds.isNotEmpty) {
-                            for (final uid in memberIds) {
+                          // Fetch actual plants from database
+                          final activePlants = await db.listPlants();
+                          for (final plant in activePlants) {
+                            if (plant.guardianId.isNotEmpty) {
                               await db.createNotification(
-                                recipientId: uid,
+                                recipientId: plant.guardianId,
                                 senderId: adminId,
                                 type: 'watering',
-                                title: '\u{1F4A7} Watering Reminder',
+                                title: '💧 Watering Reminder: ${plant.species}',
                                 body:
-                                    "It's time to water your plants! Check your garden and give them some love today.",
+                                    'It is time to water your ${plant.species}! Use the map to locate it.',
+                                linkedPlantId: plant.id,
+                                plantName: plant.species,
+                                plantLocation:
+                                    '${plant.nickname ?? "Plant"}|${plant.locationLat},${plant.locationLong}',
                               );
                               sent++;
                             }
-                          } else {
-                            // Broadcast to all if no specific members loaded
+                          }
+                          if (sent == 0) {
+                            // Broadcast to all if no specific plants loaded
                             await db.createNotification(
                               recipientId: 'all',
                               senderId: adminId,
                               type: 'watering',
-                              title: '\u{1F4A7} Watering Reminder',
+                              title: '💧 Watering Reminder',
                               body: "It's time to water your plants!",
                             );
                             sent = 1;

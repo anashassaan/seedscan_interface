@@ -617,6 +617,7 @@ class DatabaseService {
   }) async {
     final doc = await _appwrite.createDocument(
       collectionId: AppwriteConstants.notificationsCollection,
+      documentId: ID.unique(),
       data: {
         'recipient_id': recipientId,
         'sender_id': senderId,
@@ -630,7 +631,6 @@ class DatabaseService {
         'plant_location': plantLocation,
         'schedule_frequency': scheduleFrequency,
         'custom_interval_days': customIntervalDays,
-        'next_scheduled_at': null,
         'is_recurring': isRecurring,
         'is_read': false,
         'created_at': DateTime.now().toIso8601String(),

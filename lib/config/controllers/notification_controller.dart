@@ -121,6 +121,21 @@ class NotificationController extends ChangeNotifier {
   }
 
   NotificationModel _fromAppwriteNotificationModel(dynamic m) {
+    String rawLocation = m.plantLocation ?? '';
+    String parsedLocation = rawLocation;
+    double parsedLat = 0.0;
+    double parsedLng = 0.0;
+
+    if (rawLocation.contains('|')) {
+      final parts = rawLocation.split('|');
+      parsedLocation = parts[0];
+      if (parts.length > 1 && parts[1].contains(',')) {
+        final coords = parts[1].split(',');
+        parsedLat = double.tryParse(coords[0]) ?? 0.0;
+        parsedLng = double.tryParse(coords[1]) ?? 0.0;
+      }
+    }
+
     // m is a NotificationModel from models/notification_model.dart
     return NotificationModel(
       id: m.id,
@@ -128,24 +143,39 @@ class NotificationController extends ChangeNotifier {
       title: m.title,
       message: m.body,
       plantName: m.plantName ?? 'SeedScan',
-      location: m.plantLocation ?? '',
-      latitude: 0.0,
-      longitude: 0.0,
+      location: parsedLocation,
+      latitude: parsedLat,
+      longitude: parsedLng,
       timestamp: m.createdAt,
       isRead: m.isRead,
     );
   }
 
   NotificationModel _fromAppwriteData(Map<String, dynamic> data) {
+    String rawLocation = data['plant_location'] ?? '';
+    String parsedLocation = rawLocation;
+    double parsedLat = 0.0;
+    double parsedLng = 0.0;
+
+    if (rawLocation.contains('|')) {
+      final parts = rawLocation.split('|');
+      parsedLocation = parts[0];
+      if (parts.length > 1 && parts[1].contains(',')) {
+        final coords = parts[1].split(',');
+        parsedLat = double.tryParse(coords[0]) ?? 0.0;
+        parsedLng = double.tryParse(coords[1]) ?? 0.0;
+      }
+    }
+
     return NotificationModel(
       id: data['\$id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
       type: _typeFromString(data['type']),
       title: data['title'] ?? 'SeedScan',
       message: data['body'] ?? '',
       plantName: data['plant_name'] ?? 'SeedScan',
-      location: data['plant_location'] ?? '',
-      latitude: 0.0,
-      longitude: 0.0,
+      location: parsedLocation,
+      latitude: parsedLat,
+      longitude: parsedLng,
       timestamp: data['created_at'] != null
           ? DateTime.tryParse(data['created_at']) ?? DateTime.now()
           : DateTime.now(),
