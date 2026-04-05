@@ -18,6 +18,11 @@ class WalletController extends ChangeNotifier {
   WalletController();
 
   Future<void> fetchWalletData(String userId) async {
+    if (_userId != userId) {
+      _points = 0;
+      _transactions = [];
+    }
+
     _userId = userId;
     _isLoading = true;
     notifyListeners();

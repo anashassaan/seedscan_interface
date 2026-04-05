@@ -21,6 +21,7 @@ class ScanController extends ChangeNotifier {
 
   // Mutable plants list
   final List<PlantModel> _myPlants = [];
+  String? _loadedForUserId;
 
   // Loading state for DB fetch
   bool _isLoadingPlants = false;
@@ -33,6 +34,12 @@ class ScanController extends ChangeNotifier {
   /// Load all plants for [userId] from Appwrite (my_garden_qr_codes collection).
   Future<void> loadMyPlants(String userId) async {
     if (userId.isEmpty) return;
+
+    if (_loadedForUserId != userId) {
+      _myPlants.clear();
+      _loadedForUserId = userId;
+    }
+
     _isLoadingPlants = true;
     notifyListeners();
 

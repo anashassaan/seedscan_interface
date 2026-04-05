@@ -16,6 +16,12 @@ class NotificationController extends ChangeNotifier {
   // ── Initialize: load from Appwrite + subscribe to realtime ────────────────
   Future<void> initialize(String userId) async {
     if (_currentUserId == userId) return; // already initialized for this user
+
+    // User switched: clear old in-memory data and detach previous subscription.
+    await PushNotificationService().unsubscribe();
+    _notifications.clear();
+    notifyListeners();
+
     _currentUserId = userId;
 
     // Initialize local notifications
@@ -44,6 +50,7 @@ class NotificationController extends ChangeNotifier {
     await PushNotificationService().unsubscribe();
     _currentUserId = null;
     _notifications.clear();
+    notifyListeners();
   }
 
   Future<void> _loadFromAppwrite(String userId) async {

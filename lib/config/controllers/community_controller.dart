@@ -10,6 +10,7 @@ class CommunityController extends ChangeNotifier {
   // List of communities the current user belongs to
   final List<Community> _communities = [];
   final Map<String, List<CommunityPlant>> _communityPlants = {};
+  String? _loadedForUserId;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -20,6 +21,13 @@ class CommunityController extends ChangeNotifier {
   /// Load all communities that the given [userId] is a member of from Appwrite.
   Future<void> loadUserCommunities(String userId) async {
     if (userId.isEmpty) return;
+
+    if (_loadedForUserId != userId) {
+      _communities.clear();
+      _communityPlants.clear();
+      _loadedForUserId = userId;
+    }
+
     _isLoading = true;
     notifyListeners();
 
@@ -121,8 +129,7 @@ class CommunityController extends ChangeNotifier {
       notifyListeners();
       _savePlantsToCache(communityId);
     } catch (e) {
-      debugPrint(
-          'CommunityController.loadCommunityPlantsFromServer: $e');
+      debugPrint('CommunityController.loadCommunityPlantsFromServer: $e');
     } finally {
       _isLoadingCommunityPlants = false;
       notifyListeners();

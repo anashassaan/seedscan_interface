@@ -103,6 +103,8 @@ class EntryDecider extends StatefulWidget {
 
 class _EntryDeciderState extends State<EntryDecider> {
   bool _initializing = true;
+  bool _loadingUserData = false;
+  String? _loadedForUserId;
 
   @override
   void initState() {
@@ -114,22 +116,10 @@ class _EntryDeciderState extends State<EntryDecider> {
     final auth = Provider.of<AuthController>(context, listen: false);
     await auth.initialize();
 
-    // Load user's communities AND plants from Appwrite once logged in
+    // Load user-scoped data once logged in
     if (auth.isLoggedIn && !auth.isAdmin) {
-      final communityCtrl =
-          Provider.of<CommunityController>(context, listen: false);
-      final scanCtrl = Provider.of<ScanController>(context, listen: false);
-      final notifCtrl =
-          Provider.of<NotificationController>(context, listen: false);
-      final walletCtrl = Provider.of<WalletController>(context, listen: false);
       final uid = auth.userId ?? '';
-      // Fire loads concurrently
-      await Future.wait([
-        communityCtrl.loadUserCommunities(uid),
-        scanCtrl.loadMyPlants(uid),
-        notifCtrl.initialize(uid),
-        walletCtrl.fetchWalletData(uid),
-      ]);
+      await _loadUserScopedData(uid);
     }
 
     if (mounted) {
@@ -137,9 +127,39 @@ class _EntryDeciderState extends State<EntryDecider> {
     }
   }
 
+  Future<void> _loadUserScopedData(String userId) async {
+    if (userId.isEmpty || _loadingUserData) return;
+    if (_loadedForUserId == userId) return;
+
+    if (mounted) {
+      setState(() => _loadingUserData = true);
+    }
+
+    final communityCtrl =
+        Provider.of<CommunityController>(context, listen: false);
+    final scanCtrl = Provider.of<ScanController>(context, listen: false);
+    final notifCtrl =
+        Provider.of<NotificationController>(context, listen: false);
+    final walletCtrl = Provider.of<WalletController>(context, listen: false);
+
+    try {
+      await Future.wait([
+        communityCtrl.loadUserCommunities(userId),
+        scanCtrl.loadMyPlants(userId),
+        notifCtrl.initialize(userId),
+        walletCtrl.fetchWalletData(userId),
+      ]);
+      _loadedForUserId = userId;
+    } finally {
+      if (mounted) {
+        setState(() => _loadingUserData = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_initializing) {
+    if (_initializing || _loadingUserData) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
@@ -155,6 +175,17 @@ class _EntryDeciderState extends State<EntryDecider> {
     // Admin users get the admin dashboard
     if (auth.isAdmin) {
       return const AdminDashboardView();
+    }
+
+    final uid = auth.userId ?? '';
+    if (uid.isNotEmpty && _loadedForUserId != uid && !_loadingUserData) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _loadUserScopedData(uid);
+      });
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
 
     // Regular users get the main app
