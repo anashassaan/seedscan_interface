@@ -11,6 +11,7 @@ class ActivityLog {
   final String verificationStatus; // verified, rejected
   final String proofImageId;
   final String? rejectionReason;
+  final String communityId;
   final DateTime createdAt;
 
   ActivityLog({
@@ -22,6 +23,7 @@ class ActivityLog {
     required this.verificationStatus,
     required this.proofImageId,
     this.rejectionReason,
+    this.communityId = '',
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -35,6 +37,7 @@ class ActivityLog {
       verificationStatus: json['verification_status'] ?? '',
       proofImageId: json['proof_image_id'] ?? '',
       rejectionReason: json['rejection_reason'],
+      communityId: json['community_id'] ?? '',
       createdAt: json['created_at'] != null || json['\$createdAt'] != null
           ? DateTime.tryParse(json['created_at'] ?? json['\$createdAt'] ?? '')
           : null,
@@ -50,6 +53,7 @@ class ActivityLog {
       'verification_status': verificationStatus,
       'proof_image_id': proofImageId,
       'rejection_reason': rejectionReason,
+      'community_id': communityId,
       'created_at': createdAt.toIso8601String(),
     };
   }

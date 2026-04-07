@@ -24,6 +24,7 @@ class AppwriteConstants {
   static const String userFcmTokensCollection = 'user_fcm_tokens';
   static const String myGardenQrCollection = 'my_garden_qr_codes';
   static const String adminQrCodesCollection = 'admin_qr_codes';
+  static const String customTasksCollection = 'custom_tasks';
   static const String systemLogsCollection = 'system_logs';
 
   // ── Storage Bucket IDs ────────────────────────────────────────────────────

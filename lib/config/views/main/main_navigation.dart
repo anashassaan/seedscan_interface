@@ -74,21 +74,30 @@ class _MainNavigationState extends State<MainNavigation> {
     final color = isSelected
         ? Theme.of(context).colorScheme.primary
         : Theme.of(context).colorScheme.onSurface.withOpacity(0.6);
+    final screenW = MediaQuery.of(context).size.width;
+    final itemPadding = screenW < 360 ? 4.0 : 6.0;
     return InkWell(
       onTap: () => setState(() => index = i),
       customBorder: const CircleBorder(),
       child: Padding(
-        padding: const EdgeInsets.all(6.0),
+        padding: EdgeInsets.all(itemPadding),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(isSelected ? selectedIcon : icon, color: color),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: color,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+            Icon(isSelected ? selectedIcon : icon, color: color, size: 22),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: color,
+                  fontWeight:
+                      isSelected ? FontWeight.w600 : FontWeight.normal,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],

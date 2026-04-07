@@ -155,7 +155,8 @@ class _ProfileViewState extends State<ProfileView> {
         slivers: [
           // Custom App Bar with Profile Header
           SliverAppBar(
-            expandedHeight: 280,
+            expandedHeight: (MediaQuery.of(context).size.height * 0.30)
+                .clamp(220.0, 310.0),
             pinned: true,
             backgroundColor: const Color(0xFF0B6E4F),
             flexibleSpace: FlexibleSpaceBar(
@@ -248,18 +249,23 @@ class _ProfileViewState extends State<ProfileView> {
                         Text(
                           auth.userName,
                           style: GoogleFonts.poppins(
-                            fontSize: 22,
+                            fontSize: 20,
                             fontWeight: FontWeight.w700,
                             color: Colors.white,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
                         ),
                       const SizedBox(height: 4),
                       Text(
                         '@${auth.userHandle}',
                         style: GoogleFonts.poppins(
-                          fontSize: 14,
+                          fontSize: 13,
                           color: Colors.white.withOpacity(0.9),
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 8),
                       Container(
@@ -334,7 +340,7 @@ class _ProfileViewState extends State<ProfileView> {
                           isDark: isDark,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: _buildStatCard(
                           context,
@@ -345,7 +351,7 @@ class _ProfileViewState extends State<ProfileView> {
                           isDark: isDark,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: _buildStatCard(
                           context,
@@ -860,35 +866,43 @@ class _ProfileViewState extends State<ProfileView> {
         borderRadius: BorderRadius.circular(16),
       ),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         child: Column(
           children: [
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Icon(
                 icon,
                 color: color,
-                size: 24,
+                size: 20,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: GoogleFonts.poppins(
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: color,
+            const SizedBox(height: 6),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                style: GoogleFonts.poppins(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
               ),
             ),
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                color: isDark ? Colors.grey[400] : Colors.grey[600],
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  color: isDark ? Colors.grey[400] : Colors.grey[600],
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -936,19 +950,22 @@ class _ProfileViewState extends State<ProfileView> {
                 size: 24,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                fontSize: 11,
-                fontWeight: unlocked ? FontWeight.w600 : FontWeight.w400,
-                color: unlocked
-                    ? null
-                    : (isDark ? Colors.grey[500] : Colors.grey[600]),
+            const SizedBox(height: 6),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: unlocked ? FontWeight.w600 : FontWeight.w400,
+                  color: unlocked
+                      ? null
+                      : (isDark ? Colors.grey[500] : Colors.grey[600]),
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),

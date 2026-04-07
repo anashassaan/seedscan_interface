@@ -38,6 +38,18 @@ class NotificationController extends ChangeNotifier {
             _notifications.any((n) => n.id == (data['\$id'] ?? ''));
         if (!existing) {
           final model = _fromAppwriteData(data);
+          
+          // Deduplication: If this is a watering notification and we already have an 
+          // unread one for the same plant, skip it.
+          if (model.type == NotificationType.watering && model.linkedPlantId != null) {
+            final duplicate = _notifications.any((n) => 
+              n.type == NotificationType.watering && 
+              n.linkedPlantId == model.linkedPlantId && 
+              !n.isRead
+            );
+            if (duplicate) return;
+          }
+
           _notifications.insert(0, model);
           notifyListeners();
         }
@@ -89,8 +101,16 @@ class NotificationController extends ChangeNotifier {
   }
 
   void removeNotification(String id) {
+    // Remove from in-memory list immediately for a snappy UI.
     _notifications.removeWhere((n) => n.id == id);
     notifyListeners();
+
+    // Bug-2 fix: permanently delete from Appwrite so it never comes back
+    // after logout / re-login.
+    _db.deleteNotification(id).catchError((e) {
+      debugPrint(
+          '[NotificationController] deleteNotification error for $id: $e');
+    });
   }
 
   void addNotification(NotificationModel notification) {
@@ -155,6 +175,8 @@ class NotificationController extends ChangeNotifier {
       longitude: parsedLng,
       timestamp: m.createdAt,
       isRead: m.isRead,
+      linkedCommunityId: m.linkedCommunityId,
+      linkedPlantId: m.linkedPlantId,
     );
   }
 
@@ -187,6 +209,8 @@ class NotificationController extends ChangeNotifier {
           ? DateTime.tryParse(data['created_at']) ?? DateTime.now()
           : DateTime.now(),
       isRead: data['is_read'] ?? false,
+      linkedCommunityId: data['linked_community_id'],
+      linkedPlantId: data['linked_plant_id'],
     );
   }
 }
@@ -203,6 +227,8 @@ class NotificationModel {
   final double longitude;
   final DateTime timestamp;
   bool isRead;
+  final String? linkedCommunityId;
+  final String? linkedPlantId;
 
   NotificationModel({
     required this.id,
@@ -215,6 +241,8 @@ class NotificationModel {
     required this.longitude,
     required this.timestamp,
     this.isRead = false,
+    this.linkedCommunityId,
+    this.linkedPlantId,
   });
 }
 

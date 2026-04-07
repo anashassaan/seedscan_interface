@@ -12,6 +12,9 @@ class CommunityController extends ChangeNotifier {
   final Map<String, List<CommunityPlant>> _communityPlants = {};
   String? _loadedForUserId;
 
+  // Bug-3 fix: remember who is logged in so plant queries are filtered.
+  String? _currentUserId;
+
   bool _isLoading = false;
   bool get isLoading => _isLoading;
 
@@ -21,6 +24,9 @@ class CommunityController extends ChangeNotifier {
   /// Load all communities that the given [userId] is a member of from Appwrite.
   Future<void> loadUserCommunities(String userId) async {
     if (userId.isEmpty) return;
+
+    // Bug-3 fix: always keep the current user ID up-to-date.
+    _currentUserId = userId;
 
     if (_loadedForUserId != userId) {
       _communities.clear();
@@ -119,12 +125,18 @@ class CommunityController extends ChangeNotifier {
   }
 
   /// Load/refresh all member plants for [communityId] from Appwrite.
+  /// Only fetches plants belonging to the currently logged-in user.
   Future<void> loadCommunityPlantsFromServer(String communityId) async {
     if (_isLoadingCommunityPlants) return;
     _isLoadingCommunityPlants = true;
     notifyListeners();
     try {
-      final plants = await _db.getCommunityMemberPlants(communityId);
+      // Bug-3 fix: pass _currentUserId so only the logged-in user's plants
+      // are returned, not every member's plants.
+      final plants = await _db.getCommunityMemberPlants(
+        communityId,
+        userId: _currentUserId,
+      );
       _communityPlants[communityId] = plants;
       notifyListeners();
       _savePlantsToCache(communityId);
@@ -227,15 +239,16 @@ class CommunityController extends ChangeNotifier {
     return null;
   }
 
-  // Update plant image
-  void updatePlantImage(String communityId, String plantId, String imagePath) {
+  // Update plant image in-memory with the new Appwrite preview URL.
+  void updatePlantImage(String communityId, String plantId, String imageUrl) {
     if (_communityPlants.containsKey(communityId)) {
       final plants = _communityPlants[communityId]!;
       final plantIndex = plants.indexWhere((p) => p.id == plantId);
 
       if (plantIndex != -1) {
         final plant = plants[plantIndex];
-        final updatedPlant = plant.copyWith(imageUrl: imagePath);
+        // imageUrl here is the full Appwrite preview URL, not a local path.
+        final updatedPlant = plant.copyWith(imageUrl: imageUrl);
         _communityPlants[communityId]![plantIndex] = updatedPlant;
         notifyListeners();
         _savePlantsToCache(communityId);

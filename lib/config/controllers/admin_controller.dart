@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:flutter/material.dart';
 import '../../services/admin_database_service.dart';
 import '../../models/user_model.dart';
 import 'package:appwrite/appwrite.dart';
@@ -602,21 +603,74 @@ class AdminController extends ChangeNotifier {
     }
   }
 
-  /// Get activity history (PlantStats/Logs) for a specific plant.
+  /// Get activity history logs for a specific plant, including image updates.
+  ///
+  /// Uses a two-tier strategy:
+  ///  Tier 1 – query directly by plant_id (fast, uses index).
+  ///  Tier 2 – broad scan with client-side ID matching (for legacy entries
+  ///            that embed IDs inside the rejectionReason JSON metadata).
   Future<List<ActivityLog>> getPlantHistoryLogs(String plantId) async {
+    final dbService = DatabaseService();
+    final Set<String> seenIds = {};
+    final List<ActivityLog> matched = [];
+
+    // ── Tier 1: direct query by plant_id (indexed, fast) ──────────────────
     try {
-      final dbService = DatabaseService();
-      final logs = await dbService.listActivityLogs(queries: [
+      final directLogs = await dbService.listActivityLogs(queries: [
         Query.equal('plant_id', plantId),
-        Query.orderAsc('created_at'),
+        Query.orderDesc('\$createdAt'),
+        Query.limit(200),
       ]);
-      return logs;
-    } catch (e) {
       debugPrint(
-          'AdminController: Failed to fetch history for plant $plantId: $e');
-      return [];
+          'AdminController.getPlantHistoryLogs: Tier-1 returned '
+          '${directLogs.length} logs for plantId=$plantId');
+      for (final log in directLogs) {
+        if (seenIds.add(log.id)) matched.add(log);
+      }
+    } catch (e) {
+      debugPrint('AdminController.getPlantHistoryLogs: Tier-1 failed ($e)');
     }
+
+    // ── Tier 2: broad scan for logs with embedded IDs in metadata ─────────
+    // This catches entries created by older code that stored IDs inside
+    // the rejectionReason JSON instead of as the primary plant_id field.
+    try {
+      final allLogs = await dbService.listActivityLogs(queries: [
+        Query.orderDesc('\$createdAt'),
+        Query.limit(500),
+      ]);
+      for (final log in allLogs) {
+        if (seenIds.contains(log.id)) continue; // already added in Tier 1
+
+        final raw = log.rejectionReason;
+        if (raw == null || raw.trim().isEmpty) continue;
+
+        try {
+          final decoded = jsonDecode(raw);
+          if (decoded is Map) {
+            final sourceId  = decoded['source_plant_id']?.toString() ?? '';
+            final resolvedId = decoded['resolved_plant_id']?.toString() ?? '';
+            final originalId = decoded['plant_id']?.toString() ?? '';
+            if (sourceId == plantId ||
+                resolvedId == plantId ||
+                originalId == plantId) {
+              if (seenIds.add(log.id)) matched.add(log);
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('AdminController.getPlantHistoryLogs: Tier-2 failed ($e)');
+    }
+
+    // Sort oldest → newest (the UI re-sorts newest first on its end)
+    matched.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    debugPrint(
+        'AdminController.getPlantHistoryLogs: returning '
+        '${matched.length} total logs for plantId=$plantId');
+    return matched;
   }
+
 
   // ── Notification & Automation Logic ────────────────────────────────────────
 

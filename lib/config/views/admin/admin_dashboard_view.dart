@@ -14,6 +14,7 @@ import 'coin_analytics_view.dart';
 import 'admin_stats_details_view.dart';
 import 'admin_profile_view.dart';
 import 'community_details_view.dart';
+import 'admin_tasks_manager_view.dart';
 
 class AdminDashboardView extends StatefulWidget {
   const AdminDashboardView({super.key});
@@ -76,21 +77,29 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
       IconData selectedIcon, String label) {
     final isActive = _currentIndex == index;
     final color = isActive ? cs.primary : cs.onSurface.withOpacity(0.6);
+    final screenW = MediaQuery.of(context).size.width;
+    final itemPadding = screenW < 360 ? 4.0 : 6.0;
     return InkWell(
       onTap: () => setState(() => _currentIndex = index),
       customBorder: const CircleBorder(),
       child: Padding(
-        padding: const EdgeInsets.all(6.0),
+        padding: EdgeInsets.all(itemPadding),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(isActive ? selectedIcon : icon, color: color),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: color,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+            Icon(isActive ? selectedIcon : icon, color: color, size: 22),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: color,
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -327,6 +336,29 @@ class _HomeTab extends StatelessWidget {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _metricCard(
+                            cs,
+                            title: 'Broadcast',
+                            value: 'Tasks',
+                            icon: LucideIcons.clipboardCheck,
+                            color: Colors.amber.shade700,
+                            onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) =>
+                                        const AdminTasksManagerView())),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: const SizedBox.shrink(),
+                        ),
+                      ],
+                    ),
                     // Plant Health card sits directly under Disease Alerts row
                     const SizedBox(height: 12),
                     GestureDetector(
@@ -458,7 +490,7 @@ class _HomeTab extends StatelessWidget {
   static Widget _headerStat(String value, String label, IconData icon) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.15),
           borderRadius: BorderRadius.circular(16),
@@ -467,16 +499,22 @@ class _HomeTab extends StatelessWidget {
           children: [
             Icon(icon, color: Colors.white, size: 16),
             const SizedBox(height: 6),
-            Text(value,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800)),
-            Text(label,
-                style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500)),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(value,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800)),
+            ),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(label,
+                  style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500)),
+            ),
           ],
         ),
       ),
@@ -506,7 +544,7 @@ class _HomeTab extends StatelessWidget {
     required IconData icon,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
       decoration: BoxDecoration(
         color: color.withOpacity(0.10),
         borderRadius: BorderRadius.circular(16),
@@ -514,20 +552,26 @@ class _HomeTab extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(height: 8),
-          Text(
-            value.toString(),
-            style: TextStyle(
-                fontSize: 22, fontWeight: FontWeight.w800, color: color),
+          Icon(icon, color: color, size: 18),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value.toString(),
+              style: TextStyle(
+                  fontSize: 20, fontWeight: FontWeight.w800, color: color),
+            ),
           ),
           const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: color.withOpacity(0.8)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: color.withOpacity(0.8)),
+            ),
           ),
         ],
       ),
@@ -550,7 +594,7 @@ class _HomeTab extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(18),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -562,20 +606,26 @@ class _HomeTab extends StatelessWidget {
                 ),
                 child: Icon(icon, color: color, size: 20),
               ),
-              const SizedBox(height: 14),
-              Text(value,
-                  style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w900,
-                      color: cs.onSurface,
-                      letterSpacing: -0.5)),
+              const SizedBox(height: 12),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Text(value,
+                    style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
+                        color: cs.onSurface,
+                        letterSpacing: -0.5)),
+              ),
               const SizedBox(height: 2),
               Text(title.toUpperCase(),
                   style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
-                      letterSpacing: 1,
-                      color: cs.onSurface.withOpacity(0.5))),
+                      letterSpacing: 0.8,
+                      color: cs.onSurface.withOpacity(0.5)),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
             ],
           ),
         ),
@@ -669,16 +719,22 @@ class _HomeTab extends StatelessWidget {
                         style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: cs.onSurface)),
+                            color: cs.onSurface),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                     Text('${c.members.length} members  ·  ${c.location}',
                         style: TextStyle(
                             fontSize: 11,
-                            color: cs.onSurface.withOpacity(0.5))),
+                            color: cs.onSurface.withOpacity(0.5)),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),
+              const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: c.isActive
                       ? Colors.green.withOpacity(0.1)

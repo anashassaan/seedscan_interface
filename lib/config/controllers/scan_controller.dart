@@ -1,6 +1,8 @@
 // lib/config/controllers/scan_controller.dart
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
+import 'package:appwrite/appwrite.dart' show Query;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -11,6 +13,7 @@ import '../../services/apple_detection_service.dart';
 import '../../services/disease_classifier_service.dart';
 import '../../services/database_service.dart';
 import '../../services/garden_cache_service.dart';
+import '../../services/appwrite_service.dart';
 import '../../models/my_garden_qr_model.dart';
 
 class ScanController extends ChangeNotifier {
@@ -305,16 +308,18 @@ class ScanController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Update plant with new image — uploads to Appwrite and updates DB + in-memory list
+  // Upload image and log history for admin timeline.
+  // Intentionally does NOT overwrite the plant profile image.
   Future<Map<String, dynamic>> updatePlantImage(
       String plantId, String imagePath) async {
     final dbService = DatabaseService();
     final now = DateTime.now();
-    final timeLabel =
-        '${now.day}/${now.month}/${now.year} ${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+    final plant = _myPlants
+        .cast<PlantModel?>()
+        .firstWhere((p) => p?.id == plantId, orElse: () => null);
 
     try {
-      // 1. Upload to Appwrite bucket + best-effort DB update
+      // 1. Upload image to Appwrite storage + best-effort history append
       final result = await dbService.updateMyGardenPlantImage(
         docId: plantId,
         filePath: imagePath,
@@ -322,28 +327,47 @@ class ScanController extends ChangeNotifier {
       final fileId = result['fileId']!;
       final imageUrl = result['url']!;
 
-      // 2. Persist URL in Hive so it survives navigation and app restart
-      await GardenCacheService.updateImage(plantId, fileId, imageUrl);
+      // 2. Write activity log for admin history with health + location metadata.
+      try {
+        final currentUser = await AppwriteService().getCurrentUser();
+        final userId = currentUser?.$id ?? '';
+        if (userId.isNotEmpty) {
+          final historyPlantId = await dbService.resolveCanonicalPlantId(
+            userId: userId,
+            localGardenId: plantId,
+            speciesName: plant?.name,
+            latitude: plant?.latitude,
+            longitude: plant?.longitude,
+          );
 
-      // 3. Update in-memory plant list
-      final plantIndex = _myPlants.indexWhere((plant) => plant.id == plantId);
-      if (plantIndex != -1) {
-        final plant = _myPlants[plantIndex];
-        _myPlants[plantIndex] = PlantModel(
-          id: plant.id,
-          name: plant.name,
-          scientificName: plant.scientificName,
-          image: imageUrl,
-          status: plant.status,
-          statusColor: plant.statusColor,
-          lastScan: timeLabel,
-          location: plant.location,
-          latitude: plant.latitude,
-          longitude: plant.longitude,
-        );
+          final historyMeta = jsonEncode({
+            'type': 'image_update_meta',
+            'updated_at': now.toIso8601String(),
+            'health': plant?.status,
+            'location': plant?.location,
+            'latitude': plant?.latitude,
+            'longitude': plant?.longitude,
+            'source_plant_id': plantId,
+            'resolved_plant_id': historyPlantId,
+          });
+
+          await dbService.createActivityLog(
+            userId: userId,
+            plantId: historyPlantId,
+            communityId: plant?.driveId,
+            actionType: 'scan_disease', // Bypass Appwrite enum restrictions
+            coinsAwarded: 0,
+            verificationStatus: 'verified',
+            proofImageId: fileId,
+            rejectionReason: historyMeta,
+          );
+        }
+      } catch (e) {
+        debugPrint('ScanController image history log failed: $e');
+        throw Exception('Appwrite Error: $e');
       }
 
-      debugPrint('Plant $plantId image updated: $imageUrl at $timeLabel');
+      debugPrint('Plant $plantId image history saved: $imageUrl');
       notifyListeners();
 
       return {
@@ -354,25 +378,6 @@ class ScanController extends ChangeNotifier {
       };
     } catch (e) {
       debugPrint('Error updating plant image: $e');
-
-      // Fallback: store local path in-memory only (will not survive restart,
-      // but at least shows something for this session)
-      final plantIndex = _myPlants.indexWhere((plant) => plant.id == plantId);
-      if (plantIndex != -1) {
-        final plant = _myPlants[plantIndex];
-        _myPlants[plantIndex] = PlantModel(
-          id: plant.id,
-          name: plant.name,
-          scientificName: plant.scientificName,
-          image: imagePath,
-          status: plant.status,
-          statusColor: plant.statusColor,
-          lastScan: timeLabel,
-          location: plant.location,
-          latitude: plant.latitude,
-          longitude: plant.longitude,
-        );
-      }
       notifyListeners();
 
       return {
@@ -381,6 +386,7 @@ class ScanController extends ChangeNotifier {
       };
     }
   }
+
 
   // Update plant location with new GPS coordinates
   Future<Map<String, dynamic>> updatePlantLocation(String plantId) async {
@@ -634,6 +640,7 @@ class PlantModel {
   final Color statusColor;
   final String lastScan;
   final String? location;
+  final String? driveId;
   final double? latitude;
   final double? longitude;
 
@@ -646,6 +653,7 @@ class PlantModel {
     required this.statusColor,
     required this.lastScan,
     this.location,
+    this.driveId,
     this.latitude,
     this.longitude,
   });

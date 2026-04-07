@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -7,6 +9,7 @@ import '../../../models/transaction_model.dart';
 import '../../../config/appwrite_constants.dart';
 import '../../controllers/admin_controller.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class PlantDetailAdminView extends StatefulWidget {
   final PlantModel plant;
@@ -82,6 +85,23 @@ class _PlantDetailAdminViewState extends State<PlantDetailAdminView> {
     return '${AppwriteConstants.endpoint}/storage/buckets/'
         '${AppwriteConstants.plantImagesBucket}/files/$proofImageId/preview'
         '?project=${AppwriteConstants.projectId}&width=800';
+  }
+
+  Map<String, dynamic>? _historyMeta(ActivityLog log) {
+    final raw = log.rejectionReason;
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -300,6 +320,10 @@ class _PlantDetailAdminViewState extends State<PlantDetailAdminView> {
                             (context, index) {
                               final log = _logs[index];
                               final imageUrl = _proofImageUrl(log.proofImageId);
+                              final meta = _historyMeta(log);
+                              final metaHealth = meta?['health']?.toString();
+                              final metaLocation =
+                                  meta?['location']?.toString();
                               final isFirst = index == _logs.length - 1;
 
                               return Row(
@@ -316,7 +340,10 @@ class _PlantDetailAdminViewState extends State<PlantDetailAdminView> {
                                           shape: BoxShape.circle,
                                         ),
                                         child: Icon(
-                                          _actionIcon(log.actionType),
+                                          _actionIcon(meta?['type'] ==
+                                                  'image_update_meta'
+                                              ? 'image_update'
+                                              : log.actionType),
                                           size: 16,
                                           color: cs.primary,
                                         ),
@@ -389,8 +416,11 @@ class _PlantDetailAdminViewState extends State<PlantDetailAdminView> {
                                                   children: [
                                                     Expanded(
                                                       child: Text(
-                                                        _formatActionType(
-                                                            log.actionType),
+                                                        _formatActionType(meta?[
+                                                                    'type'] ==
+                                                                'image_update_meta'
+                                                            ? 'image_update'
+                                                            : log.actionType),
                                                         style: const TextStyle(
                                                             fontWeight:
                                                                 FontWeight.bold,
@@ -471,6 +501,95 @@ class _PlantDetailAdminViewState extends State<PlantDetailAdminView> {
                                                     ],
                                                   ),
                                                 ],
+                                                if (metaHealth != null &&
+                                                    metaHealth.isNotEmpty) ...[
+                                                  const SizedBox(height: 8),
+                                                  Row(
+                                                    children: [
+                                                      Icon(
+                                                          LucideIcons
+                                                              .heartPulse,
+                                                          size: 12,
+                                                          color: cs.onSurface
+                                                              .withOpacity(
+                                                                  0.6)),
+                                                      const SizedBox(width: 6),
+                                                      Text(
+                                                        'Health: $metaHealth',
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          color: cs.onSurface
+                                                              .withOpacity(
+                                                                  0.75),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
+                                                if (meta?['type'] == 'custom_task_proof') ...[
+                                                  const SizedBox(height: 8),
+                                                  if (meta?['title'] != null)
+                                                    Text(
+                                                      'Mission: ${meta?['title']}',
+                                                      style: TextStyle(
+                                                        fontSize: 13,
+                                                        fontWeight: FontWeight.w600,
+                                                        color: cs.primary,
+                                                      ),
+                                                    ),
+                                                  if (meta?['user_lat'] != null)
+                                                    Padding(
+                                                      padding: const EdgeInsets.only(top: 4),
+                                                      child: InkWell(
+                                                        onTap: () async {
+                                                          final lat = meta?['user_lat'];
+                                                          final lng = meta?['user_lng'];
+                                                          if (lat != null && lng != null) {
+                                                            final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+                                                            if (await canLaunchUrl(url)) {
+                                                              await launchUrl(url, mode: LaunchMode.externalApplication);
+                                                            }
+                                                          }
+                                                        },
+                                                        child: Row(
+                                                          children: [
+                                                            Icon(LucideIcons.mapPin, size: 12, color: cs.primary),
+                                                            const SizedBox(width: 4),
+                                                            Text(
+                                                              'User location at completion: ${meta?['user_lat'].toStringAsFixed(4)}, ${meta?['user_lng'].toStringAsFixed(4)}',
+                                                              style: TextStyle(fontSize: 11, color: cs.primary, decoration: TextDecoration.underline),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                ],
+                                                if (metaLocation != null &&
+                                                    metaLocation
+                                                        .isNotEmpty) ...[
+                                                  const SizedBox(height: 4),
+                                                  Row(
+                                                    children: [
+                                                      Icon(LucideIcons.mapPin,
+                                                          size: 12,
+                                                          color: cs.onSurface
+                                                              .withOpacity(
+                                                                  0.6)),
+                                                      const SizedBox(width: 6),
+                                                      Expanded(
+                                                        child: Text(
+                                                          'Location: $metaLocation',
+                                                          style: TextStyle(
+                                                            fontSize: 12,
+                                                            color: cs.onSurface
+                                                                .withOpacity(
+                                                                    0.75),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
                                               ],
                                             ),
                                           ),
@@ -501,6 +620,8 @@ class _PlantDetailAdminViewState extends State<PlantDetailAdminView> {
         return 'Initial Planting';
       case 'image_update':
         return 'Image Updated';
+      case 'custom_task_proof':
+        return 'Mission Completed';
       default:
         if (type.isEmpty) return 'Activity';
         return type[0].toUpperCase() + type.substring(1);
@@ -517,6 +638,8 @@ class _PlantDetailAdminViewState extends State<PlantDetailAdminView> {
         return LucideIcons.leaf;
       case 'image_update':
         return LucideIcons.camera;
+      case 'custom_task_proof':
+        return LucideIcons.clipboardCheck;
       default:
         return LucideIcons.activity;
     }

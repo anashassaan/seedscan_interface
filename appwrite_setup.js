@@ -60,10 +60,10 @@ async function ensureBucket(id, name) {
 // Helper: create collection if it doesn't exist
 async function ensureCollection(id, name) {
   try {
-    await databases.get(DATABASE_ID, id);
+    await databases.getCollection(DATABASE_ID, id);
     console.log(`  ✓ Collection "${name}" already exists`);
   } catch {
-    await databases.create(DATABASE_ID, id, name, [
+    await databases.createCollection(DATABASE_ID, id, name, [
       sdk.Permission.read(sdk.Role.users()),
       sdk.Permission.create(sdk.Role.users()),
       sdk.Permission.update(sdk.Role.users()),
@@ -277,10 +277,12 @@ async function main() {
   await attr("activity_logs", "string",  "proof_image_id");
   await attr("activity_logs", "string",  "rejection_reason",      { size: 500 });
   await attr("activity_logs", "string",  "plant_species");
+  await attr("activity_logs", "string",  "community_id");
   await attr("activity_logs", "string",  "created_at");
   await sleep(2000); // wait for attributes before indexes
-  await ensureIndex("activity_logs", "idx_plant_id",  ["plant_id"],  ["ASC"]);
-  await ensureIndex("activity_logs", "idx_user_id",   ["user_id"],   ["ASC"]);
+  await ensureIndex("activity_logs", "idx_plant_id",     ["plant_id"],     ["ASC"]);
+  await ensureIndex("activity_logs", "idx_user_id",      ["user_id"],      ["ASC"]);
+  await ensureIndex("activity_logs", "idx_community_id", ["community_id"], ["ASC"]);
   await sleep(1000);
 
   // ──────────────────────────────────
@@ -395,8 +397,23 @@ async function main() {
   await attr("system_logs", "string", "details",       { size: 2000 });
   await attr("system_logs", "string", "created_at");
 
+  // ──────────────────────────────────
+  // 16. CUSTOM TASKS
+  // ──────────────────────────────────
+  console.log("16/16 custom_tasks");
+  await ensureCollection("custom_tasks", "Custom Tasks");
+  await attr("custom_tasks", "string",  "title",        { size: 255, required: true });
+  await attr("custom_tasks", "string",  "description",  { size: 1000, required: true });
+  await attr("custom_tasks", "string",  "category",     { size: 50, required: true });
+  await attr("custom_tasks", "string",  "priority",     { size: 50, required: true });
+  await attr("custom_tasks", "integer", "points",       { required: true });
+  await attr("custom_tasks", "string",  "target_type",  { size: 100, required: true });
+  await attr("custom_tasks", "string",  "target_value", { size: 255, required: false });
+  await attr("custom_tasks", "datetime", "created_at",  { required: true });
+  await sleep(1000);
+
   console.log("\n═══ Setup complete! ═══");
-  console.log("All 15 collections are ready.");
+  console.log("All 16 collections are ready.");
 
   // ──────────────────────────────────
   // STORAGE BUCKETS

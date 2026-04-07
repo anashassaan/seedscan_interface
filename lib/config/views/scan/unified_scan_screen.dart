@@ -1247,6 +1247,7 @@ class _UnifiedCommunityQRDialogState extends State<_UnifiedCommunityQRDialog> {
         await _db.createActivityLog(
           userId: userId,
           plantId: createdPlantId,
+          communityId: widget.communityId,
           actionType: 'register',
           coinsAwarded: 10,
           verificationStatus: 'verified',

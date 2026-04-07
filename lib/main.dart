@@ -83,9 +83,23 @@ class SeedScanApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             title: 'SeedScan',
             theme: AppTheme.light(),
-            darkTheme: AppTheme
-                .dark(), // Assuming AppTheme has a dark() method, if not I'll use standard dark
+            darkTheme: AppTheme.dark(),
             themeMode: themeController.themeMode,
+            // Clamp the system text-scale factor globally so that users
+            // with large accessibility font settings cannot cause overflow.
+            // 0.9–1.15 still respects the user's preference while keeping
+            // all layouts safe on any screen size.
+            builder: (context, child) {
+              final mediaQuery = MediaQuery.of(context);
+              final clampedTextScaler = mediaQuery.textScaler.clamp(
+                minScaleFactor: 0.9,
+                maxScaleFactor: 1.15,
+              );
+              return MediaQuery(
+                data: mediaQuery.copyWith(textScaler: clampedTextScaler),
+                child: child!,
+              );
+            },
             home: const EntryDecider(),
           );
         },

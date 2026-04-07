@@ -47,26 +47,33 @@ class HomeView extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Hello,',
-                            style: GoogleFonts.poppins(
-                              fontSize: 16,
-                              color: cs.onSurface.withOpacity(0.6),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Hello,',
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                color: cs.onSurface.withOpacity(0.6),
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                          Text(
-                            auth.userName,
-                            style: GoogleFonts.poppins(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: cs.onSurface,
+                            Text(
+                              auth.userName,
+                              style: GoogleFonts.poppins(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: cs.onSurface,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 12),
                       CircleAvatar(
                         radius: 24,
                         backgroundImage: auth.profileImage != null
@@ -237,7 +244,7 @@ class HomeView extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: bgColor,
           borderRadius: BorderRadius.circular(20),
@@ -245,22 +252,28 @@ class HomeView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon, color: iconColor, size: 28),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: GoogleFonts.poppins(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: iconColor,
+            Icon(icon, color: iconColor, size: 26),
+            const SizedBox(height: 10),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: GoogleFonts.poppins(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: iconColor,
+                ),
               ),
             ),
             Text(
               title,
               style: GoogleFonts.poppins(
-                fontSize: 14,
+                fontSize: 13,
                 color: iconColor.withOpacity(0.8),
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -272,7 +285,7 @@ class HomeView extends StatelessWidget {
   Widget _statCardStatic(String title, String value, IconData icon,
       ColorScheme cs, Color bgColor, Color iconColor) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(20),
@@ -280,22 +293,28 @@ class HomeView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: iconColor, size: 28),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: GoogleFonts.poppins(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: iconColor,
+          Icon(icon, color: iconColor, size: 26),
+          const SizedBox(height: 10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: GoogleFonts.poppins(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: iconColor,
+              ),
             ),
           ),
           Text(
             title,
             style: GoogleFonts.poppins(
-              fontSize: 14,
+              fontSize: 13,
               color: iconColor.withOpacity(0.8),
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -307,7 +326,6 @@ class HomeView extends StatelessWidget {
       BuildContext context, IconData icon, String label, int index) {
     return InkWell(
       onTap: () {
-        // Special handling for My Garden button
         if (label == 'My Garden') {
           Navigator.push(
             context,
@@ -321,10 +339,22 @@ class HomeView extends StatelessWidget {
       },
       borderRadius: BorderRadius.circular(20),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          CircleAvatar(radius: 32, child: Icon(icon, size: 32)),
+          CircleAvatar(radius: 30, child: Icon(icon, size: 28)),
           const SizedBox(height: 6),
-          Text(label),
+          SizedBox(
+            width: 72,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -342,6 +372,7 @@ class HomeView extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           badges.Badge(
             showBadge: badgeCount > 0,
@@ -350,13 +381,24 @@ class HomeView extends StatelessWidget {
               style: const TextStyle(color: Colors.white, fontSize: 10),
             ),
             child: CircleAvatar(
-              radius: 32,
+              radius: 30,
               backgroundColor: Colors.blue.shade100,
-              child: Icon(icon, size: 32, color: Colors.blue.shade700),
+              child: Icon(icon, size: 28, color: Colors.blue.shade700),
             ),
           ),
           const SizedBox(height: 6),
-          Text(label),
+          SizedBox(
+            width: 72,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 12),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -418,25 +460,29 @@ class HomeView extends StatelessWidget {
       );
     }
 
-    return SizedBox(
-      height: 160,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: plants.length,
-        itemBuilder: (context, index) {
-          final plant = plants[index];
-          return _plantBox(plant.name, plant.status, plant.image,
-              plant.statusColor, plant.lastScan);
-        },
-      ),
-    );
+    return LayoutBuilder(builder: (context, constraints) {
+      // Card width = 35% of available width, clamped between 110 and 170 dp
+      final cardW = (constraints.maxWidth * 0.35).clamp(110.0, 170.0);
+      return SizedBox(
+        height: 160,
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          itemCount: plants.length,
+          itemBuilder: (context, index) {
+            final plant = plants[index];
+            return _plantBox(plant.name, plant.status, plant.image,
+                plant.statusColor, plant.lastScan, cardW);
+          },
+        ),
+      );
+    });
   }
 
   // Plant card — real data
-  Widget _plantBox(
-      String name, String status, String img, Color statusColor, String date) {
+  Widget _plantBox(String name, String status, String img, Color statusColor,
+      String date, [double width = 140]) {
     return Container(
-      width: 140,
+      width: width,
       margin: const EdgeInsets.only(right: 16),
       child: Card(
         shape: RoundedRectangleBorder(

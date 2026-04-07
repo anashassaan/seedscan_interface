@@ -1,4 +1,6 @@
 // lib/config/views/social/community_plants_view.dart
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -1090,9 +1092,13 @@ class _CommunityPlantCard extends StatelessWidget {
   }
 }
 
-/// Uploads [imagePath] to Appwrite Storage, updates the plant document's
-/// image_url, creates an activity_log entry so admin history is populated,
-/// then refreshes the in-memory community plant list.
+/// Uploads [imagePath] to Appwrite Storage and writes an activity-log entry
+/// with actionType = 'image_update' so the admin Plant History timeline shows
+/// a new dynamic card with the photo, camera icon, timestamp, health, and
+/// VERIFIED status badge.
+///
+/// IMPORTANT: this intentionally does NOT overwrite plant.image_url — the
+/// plant's profile image in the card header stays unchanged.
 Future<void> _uploadAndLogPlantImage({
   required BuildContext context,
   required String imagePath,
@@ -1100,58 +1106,88 @@ Future<void> _uploadAndLogPlantImage({
   required String communityId,
   required CommunityController communityController,
 }) async {
+  final db = DatabaseService();
+
+  // ── Step 1: Upload photo to Appwrite Storage ─────────────────────────────
+  late final String fileId;
+  late final String imageUrl;
   try {
-    final db = DatabaseService();
-    final fileId = await db.uploadPlantImage(imagePath);
-    final imageUrl = db.getPlantImageUrl(fileId);
-
-    // 1. Optimistically update in-memory list so the card refreshes immediately.
-    communityController.updatePlantImage(communityId, plant.id, imageUrl);
-
-    // 2. Persist updated image URL on the plant document in Appwrite.
-    try {
-      await db.updatePlant(plant.id, {'image_url': imageUrl});
-    } catch (e) {
-      debugPrint('CommunityPlants: updatePlant image_url failed: $e');
-    }
-
-    // 3. Write an activity log so the admin history timeline shows this change.
-    try {
-      if (context.mounted) {
-        final auth = Provider.of<AuthController>(context, listen: false);
-        await db.createActivityLog(
-          userId: auth.userId ?? '',
-          plantId: plant.id,
-          actionType: 'image_update',
-          coinsAwarded: 0,
-          verificationStatus: 'verified',
-          proofImageId: fileId,
-        );
-      }
-    } catch (e) {
-      debugPrint('CommunityPlants: createActivityLog failed: $e');
-    }
-
+    fileId = await db.uploadPlantImage(imagePath);
+    // Build a full preview URL — the admin panel uses this to render the image.
+    imageUrl = db.getPlantImageUrl(fileId);
+  } catch (e) {
+    debugPrint('CommunityPlants: upload failed: $e');
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Plant image updated successfully!',
+          content: Text('Failed to upload image: $e',
               style: GoogleFonts.poppins()),
-          backgroundColor: Colors.green,
+          backgroundColor: Colors.red,
         ),
+      );
+    }
+    return;
+  }
+
+  // ── Step 2: Write activity-log entry for admin history timeline ──────────
+  // actionType = 'image_update'  →  Admin panel shows:
+  //   • Camera icon (🎥) on the timeline dot
+  //   • "Image Updated" as the card title
+  //   • VERIFIED badge
+  //   • Uploaded photo rendered above the card text
+  //   • Health + Location metadata below the text
+  //
+  // NOTE: We do NOT call db.updatePlant() here — profile image stays as-is.
+  try {
+    if (context.mounted) {
+      final auth = Provider.of<AuthController>(context, listen: false);
+      final userId = auth.userId ?? '';
+      final nowIso = DateTime.now().toIso8601String();
+
+      final historyMeta = jsonEncode({
+        'type': 'image_update_meta',  // triggers 'image_update' branch in admin
+        'updated_at': nowIso,
+        'health': plant.status,
+        'location': plant.location,
+        'latitude': plant.latitude,
+        'longitude': plant.longitude,
+        'source_plant_id': plant.id,
+        'resolved_plant_id': plant.id,
+      });
+
+      await db.createActivityLog(
+        userId: userId,
+        plantId: plant.id,          // correct plant doc ID — no fuzzy match
+        // 'scan_disease' is used because the Appwrite schema enum only accepts
+        // ['water', 'scan_disease', 'register']. The admin history panel
+        // detects image-update entries via meta['type'] == 'image_update_meta'
+        // (stored in rejectionReason) and overrides the display to show
+        // camera icon + "Image Updated" title automatically.
+        actionType: 'scan_disease',
+        coinsAwarded: 0,
+        verificationStatus: 'verified',
+        proofImageId: imageUrl,     // full URL → admin CachedNetworkImage renders it
+        rejectionReason: historyMeta,
       );
     }
   } catch (e) {
-    debugPrint('CommunityPlants: uploadPlantImage failed: $e');
-    // Fall back to showing the local file path so the card still updates.
-    communityController.updatePlantImage(communityId, plant.id, imagePath);
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Image saved locally.', style: GoogleFonts.poppins()),
-          backgroundColor: Colors.orange,
-        ),
-      );
-    }
+    debugPrint('CommunityPlants: createActivityLog failed: $e');
+    // Non-fatal — the image is safely in Appwrite Storage.
+  }
+
+  // ── Step 3: Refresh the in-memory plant card (no profile image change) ───
+  // Update in-memory only for visual feedback in the community list; the
+  // plant document's image_url field itself is NOT modified.
+  communityController.updatePlantImage(communityId, plant.id, imageUrl);
+
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Plant image added to history!',
+            style: GoogleFonts.poppins()),
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 }
+

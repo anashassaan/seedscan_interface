@@ -9,6 +9,7 @@ import '../models/transaction_model.dart'; // ActivityLog
 import '../models/qr_code_model.dart'; // DriveModel, RewardModel, UserFcmToken
 import '../models/notification_model.dart';
 import '../models/my_garden_qr_model.dart';
+import '../models/custom_task_model.dart';
 import 'appwrite_service.dart';
 
 /// High-level, typed database helper that sits on top of [AppwriteService].
@@ -217,19 +218,19 @@ class DatabaseService {
     required String verificationStatus,
     required String proofImageId,
     String? rejectionReason,
+    String? communityId,
   }) async {
     final doc = await _appwrite.createDocument(
       collectionId: AppwriteConstants.activityLogsCollection,
       data: {
         'user_id': userId,
         'plant_id': plantId,
+        'community_id': communityId ?? '',
         'action_type': actionType,
         'coins_awarded': coinsAwarded,
         'verification_status': verificationStatus,
         'proof_image_id': proofImageId,
-        // Always supply created_at — Appwrite schema requires this attribute.
         'created_at': DateTime.now().toIso8601String(),
-        // Appwrite rejects null for string attributes; fall back to empty string.
         'rejection_reason': rejectionReason ?? '',
       },
     );
@@ -240,13 +241,22 @@ class DatabaseService {
     try {
       final res = await _appwrite.getDocuments(
         collectionId: AppwriteConstants.activityLogsCollection,
-        queries: queries,
+        queries: queries ?? [
+          // Default: newest 500 logs so we don't miss recent entries.
+          // Appwrite's default limit is 25 which silently drops new docs.
+          Query.orderDesc('\$createdAt'),
+          Query.limit(500),
+        ],
       );
-      return (res.documents as List)
-          .map((d) => ActivityLog.fromJson(d.data))
-          .toList();
+      return (res.documents as List).map((d) {
+        // Merge the system $id into the data map so ActivityLog.fromJson
+        // can read it — d.data does not include system fields by itself.
+        final merged = <String, dynamic>{'\$id': d.$id, ...d.data};
+        return ActivityLog.fromJson(merged);
+      }).toList();
     } catch (e) {
       debugPrint('DB: listActivityLogs failed: $e');
+      print('APPWRITE FETCH ERROR: $e');
       return [];
     }
   }
@@ -692,6 +702,21 @@ class DatabaseService {
     );
   }
 
+  /// Permanently delete a notification document from Appwrite so it never
+  /// reappears on next login.
+  Future<void> deleteNotification(String notificationId) async {
+    try {
+      await _appwrite.deleteDocument(
+        collectionId: AppwriteConstants.notificationsCollection,
+        documentId: notificationId,
+      );
+    } catch (e) {
+      debugPrint('DB: deleteNotification failed for $notificationId: $e');
+      // Rethrow so the controller can decide whether to keep it in-memory.
+      rethrow;
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // USER FCM TOKENS
   // ---------------------------------------------------------------------------
@@ -819,21 +844,31 @@ class DatabaseService {
     }
   }
 
-  /// Fetch all planted QR codes for every member of [communityId] and return
-  /// them as [CommunityPlant] objects for the community plants view.
+  /// Fetch planted QR codes for [communityId] and return them as
+  /// [CommunityPlant] objects for the community plants view.
+  ///
+  /// When [userId] is provided only plants belonging to that guardian are
+  /// returned — this is the correct behaviour for the common-user "My Plants"
+  /// tab inside a community. Omit [userId] (or pass null) only when you
+  /// intentionally want every member's plants (e.g. admin panels).
   Future<List<CommunityPlant>> getCommunityMemberPlants(
-      String communityId) async {
-    // Query the plants collection by drive_id == communityId.
-    // Community QR scans always call createPlant(driveId: communityId),
-    // so this is the correct source of truth for community-specific plants.
+      String communityId, {String? userId}) async {
+    // Build query: always filter by drive_id; optionally also filter by guardian.
     try {
+      final queries = <String>[
+        Query.equal('drive_id', communityId),
+        Query.orderDesc('\$createdAt'),
+        Query.limit(500),
+      ];
+
+      // Bug-3 fix: show only the current user's plants when userId is supplied.
+      if (userId != null && userId.isNotEmpty) {
+        queries.insert(1, Query.equal('guardian_id', userId));
+      }
+
       final res = await _appwrite.getDocuments(
         collectionId: AppwriteConstants.plantsCollection,
-        queries: [
-          Query.equal('drive_id', communityId),
-          Query.orderDesc('\$createdAt'),
-          Query.limit(500),
-        ],
+        queries: queries,
       );
 
       return (res.documents as List).map((d) {
@@ -978,8 +1013,10 @@ class DatabaseService {
   }
 
   /// Update a My Garden plant's image in the database (upload + update doc).
-  /// The file is always uploaded to storage; the DB update is best-effort
-  /// (silently ignored if the collection schema lacks the attributes).
+  /// The file is always uploaded to storage; DB write is best-effort.
+  ///
+  /// Intentionally does NOT overwrite profile image fields.
+  /// It appends an entry to `image_history` when the schema supports it.
   /// Returns {'fileId': ..., 'url': ..., 'updatedAt': ...}.
   Future<Map<String, String>> updateMyGardenPlantImage({
     required String docId,
@@ -990,28 +1027,36 @@ class DatabaseService {
     final url = getPlantImageUrl(fileId);
     final now = DateTime.now().toIso8601String();
 
-    // 2. Best-effort: update the document with new image info.
-    //    If the Appwrite collection schema doesn't have these attributes yet,
-    //    or if there's a permissions error, we still return the URL so the
-    //    caller can display and cache it locally.
+    // 2. Best-effort: append to image history only.
     try {
+      final currentDoc = await _appwrite.getDocument(
+        collectionId: AppwriteConstants.myGardenQrCollection,
+        documentId: docId,
+      );
+
+      final existingHistory =
+          List<dynamic>.from(currentDoc.data['image_history'] ?? const []);
+      existingHistory.add(
+        '{"fileId":"$fileId","url":"$url","updatedAt":"$now"}',
+      );
+
       await _appwrite.updateDocument(
         collectionId: AppwriteConstants.myGardenQrCollection,
         documentId: docId,
         data: {
-          'image_file_id': fileId,
-          'image_url': url,
+          'image_history': existingHistory,
         },
       );
     } catch (e) {
-      debugPrint('updateMyGardenPlantImage: DB update skipped ($e). '
+      debugPrint('updateMyGardenPlantImage: history append skipped ($e). '
           'Image uploaded OK — fileId=$fileId');
     }
 
     return {'fileId': fileId, 'url': url, 'updatedAt': now};
   }
 
-  /// Update a My Garden plant's location in the database.
+  // ---------------------------------------------------------------------------
+  // CLOUD FUNCTIONS (convenience wrappers)
   Future<void> updateMyGardenPlantLocation({
     required String docId,
     required double lat,
@@ -1132,5 +1177,101 @@ class DatabaseService {
       width: width,
       height: height,
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // CUSTOM TASKS (ADMIN BROADCASTS)
+  // ---------------------------------------------------------------------------
+
+  Future<CustomTaskModel> createCustomTask(Map<String, dynamic> data) async {
+    final doc = await _appwrite.createDocument(
+      collectionId: AppwriteConstants.customTasksCollection,
+      documentId: ID.unique(),
+      data: data,
+    );
+    return CustomTaskModel.fromAppwrite(doc.data);
+  }
+
+  Future<List<CustomTaskModel>> listCustomTasks({List<String>? queries}) async {
+    try {
+      final res = await _appwrite.getDocuments(
+        collectionId: AppwriteConstants.customTasksCollection,
+        queries: queries ?? [Query.orderDesc('created_at')],
+      );
+      return (res.documents as List).map((d) {
+        final merged = <String, dynamic>{'\$id': d.$id, ...d.data};
+        return CustomTaskModel.fromAppwrite(merged);
+      }).toList();
+    } catch (e) {
+      debugPrint('DB: listCustomTasks failed: $e');
+      return [];
+    }
+  }
+
+  Future<void> deleteCustomTask(String taskId) async {
+    await _appwrite.deleteDocument(
+      collectionId: AppwriteConstants.customTasksCollection,
+      documentId: taskId,
+    );
+  }
+
+  /// ---------------------------------------------------------------------------
+  /// ID RESOLUTION HELPERS (CANONICAL MAPPING)
+  /// ---------------------------------------------------------------------------
+
+  /// Maps a Local Garden ID (from my_garden_qr_codes) to a Canonical Plant ID
+  /// (from plants collection) so admin history queries can find the logs.
+  Future<String> resolveCanonicalPlantId({
+    required String userId,
+    required String localGardenId,
+    String? speciesName,
+    double? latitude,
+    double? longitude,
+  }) async {
+    // 1) Fast path: check if localGardenId already exists in plants collection
+    try {
+      final direct = await getPlant(localGardenId);
+      if (direct != null) return localGardenId;
+    } catch (_) {}
+
+    // 2) Fallback: find plants owned by this user
+    try {
+      var myPlants = await listMyPlants(userId);
+      if (myPlants.isEmpty) {
+        final all = await listPlants(queries: [Query.limit(100)]);
+        myPlants = all.where((p) => p.guardianId == userId).toList();
+      }
+
+      if (myPlants.isNotEmpty) {
+        // If species name is provided, try to match it
+        if (speciesName != null && speciesName.isNotEmpty) {
+          final sameSpecies = myPlants
+              .where(
+                  (p) => p.species.toLowerCase() == speciesName.toLowerCase())
+              .toList();
+          
+          if (sameSpecies.isNotEmpty) {
+            // Sort by nearest location if coordinates are available
+            if (latitude != null && longitude != null) {
+              sameSpecies.sort((a, b) {
+                final da = (a.locationLat - latitude).abs() +
+                    (a.locationLong - longitude).abs();
+                final dbv = (b.locationLat - latitude).abs() +
+                    (b.locationLong - longitude).abs();
+                return da.compareTo(dbv);
+              });
+            }
+            return sameSpecies.first.id;
+          }
+        }
+        // Last resort: the first plant owned by the user
+        return myPlants.first.id;
+      }
+    } catch (e) {
+      debugPrint('DB: resolveCanonicalPlantId mapping failed: $e');
+    }
+
+    // Default to the source ID if no canonical match found
+    return localGardenId;
   }
 }

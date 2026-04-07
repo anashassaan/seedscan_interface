@@ -1,5 +1,5 @@
-// lib/views/home/watering_screen.dart
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -10,6 +10,8 @@ import 'package:geolocator/geolocator.dart';
 import '../../controllers/notification_controller.dart';
 import '../../controllers/wallet_controller.dart';
 import '../../controllers/scan_controller.dart';
+import '../../controllers/auth_controller.dart';
+import '../../../services/database_service.dart';
 
 class WateringScreen extends StatefulWidget {
   const WateringScreen({super.key});
@@ -75,10 +77,14 @@ class _WateringScreenState extends State<WateringScreen> {
     final walletController =
         Provider.of<WalletController>(context, listen: false);
 
-    // Filter notifications for watering type
+    // Filter notifications for watering type and within 72 hours (do not filter out read ones until completed)
     final wateringNotifications = notificationController.notifications
-        .where((n) => n.type == NotificationType.watering)
-        .toList();
+        .where((n) {
+          if (n.type != NotificationType.watering) return false;
+          if (n.isRead) return false; // Hide if already marked as read/done
+          if (DateTime.now().difference(n.timestamp).inHours > 72) return false;
+          return true;
+        }).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -94,7 +100,7 @@ class _WateringScreenState extends State<WateringScreen> {
                 final count =
                     wateringNotifications.where((n) => !n.isRead).length;
                 for (var notification in wateringNotifications) {
-                  notificationController.markAsRead(notification.id);
+                  notificationController.removeNotification(notification.id);
                 }
                 // Award points for completing tasks
                 final pointsEarned = count * 50;
@@ -367,85 +373,23 @@ class _WateringScreenState extends State<WateringScreen> {
                 ),
               ),
 
-            if (!notification.isRead) ...[
-              if (notification.location.isEmpty && notification.latitude == 0.0)
-                const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  IconButton(
-                    onPressed: () => _showTaskVerificationDialog(
-                      context,
-                      notification,
-                      controller,
-                    ),
-                    icon: Icon(
-                      notification.isRead
-                          ? LucideIcons.checkCircle2
-                          : LucideIcons.circle,
-                      color: notification.isRead ? Colors.green : cs.outline,
-                    ),
-                    tooltip: 'Complete Task',
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                FilledButton.icon(
+                  onPressed: () => _showTaskVerificationDialog(
+                    context,
+                    notification,
+                    controller,
                   ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 12),
-
-            // Message
-            Text(
-              notification.message,
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                color: cs.onSurface.withOpacity(0.8),
-              ),
+                  icon: const Icon(LucideIcons.droplets, size: 18),
+                  label: const Text('Complete Task'),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
-
-            // Location
-            InkWell(
-              onTap: () => _openMap(
-                context,
-                notification.latitude,
-                notification.longitude,
-                notification.plantName,
-              ),
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.grey[850] : Colors.grey[100],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      LucideIcons.mapPin,
-                      size: 16,
-                      color: cs.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        notification.location,
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          color: cs.onSurface.withOpacity(0.8),
-                        ),
-                      ),
-                    ),
-                    Icon(
-                      LucideIcons.externalLink,
-                      size: 16,
-                      color: cs.primary,
-                    ),
-                  ],
-                ),
-              ),
-            ),
 
             // Watering tips
-            const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -486,43 +430,52 @@ class _WateringScreenState extends State<WateringScreen> {
     NotificationModel notification,
     NotificationController controller,
   ) async {
-    if (notification.isRead) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Task already completed'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
+
 
     final cs = Theme.of(context).colorScheme;
     final scanController = Provider.of<ScanController>(context, listen: false);
 
-    // Find the plant associated with this notification
-    final plant = scanController
-        .getMyPlants()
-        .firstWhere((p) => p.name == notification.plantName, orElse: () {
-      return scanController.getMyPlants().first; // Fallback
-    });
+    // ── Safe plant lookup — never throws ──────────────────────────────────────
+    // If no plant matches the name (empty garden, name mismatch) we continue
+    // with null and fall back to the notification's own coordinates.
+    final plants = scanController.getMyPlants();
+    final plant = plants.isEmpty
+        ? null
+        : plants.cast<dynamic>().firstWhere(
+              (p) => p.name == notification.plantName,
+              orElse: () => null,
+            );
+
+    // Resolve the plant's Appwrite document ID for the activity log.
+    // If the plant is not found locally, we pass the notification's plantName
+    // as a best-effort ID — the admin tier-2 scan will still find it via
+    // the rejectionReason metadata.
+    final plantId = (plant != null && (plant.id as String).isNotEmpty)
+        ? plant.id as String
+        : notification.plantName;
+
+    // Coordinates for the 2-metre proximity check.
+    final double targetLat = (plant?.latitude as double?) ?? notification.latitude;
+    final double targetLng = (plant?.longitude as double?) ?? notification.longitude;
 
     String? capturedImagePath;
     Position? currentPosition;
     bool isLocationVerified = false;
     bool isPhotoTaken = false;
+    bool _isSubmitting = false;
 
     await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
+        builder: (ctx, setDialogState) => AlertDialog(
           title: Row(
             children: [
               Icon(LucideIcons.clipboardCheck, color: cs.primary),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Complete Task',
+                  'Complete Watering Task',
                   style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
                 ),
               ),
@@ -533,7 +486,7 @@ class _WateringScreenState extends State<WateringScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Task info
+                // ── Task info banner ────────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -563,36 +516,46 @@ class _WateringScreenState extends State<WateringScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Requirements Section
-                Text(
-                  'Requirements for +50 points:',
-                  style: GoogleFonts.poppins(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: cs.primary,
-                  ),
+                // ── Earn-coins requirement heading ──────────────────────────
+                Row(
+                  children: [
+                    const Icon(LucideIcons.coins,
+                        size: 16, color: Colors.amber),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Complete both steps to earn +5 coins:',
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: cs.primary,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
 
-                // Location Verification
+                // ── Step 1 — Location Verification (2-metre radius) ─────────
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: isLocationVerified
                         ? Colors.green.withOpacity(0.1)
-                        : Colors.grey.withOpacity(0.1),
+                        : Colors.grey.withOpacity(0.08),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isLocationVerified ? Colors.green : Colors.grey,
+                      color:
+                          isLocationVerified ? Colors.green : Colors.grey.shade300,
                     ),
                   ),
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(
                         isLocationVerified
                             ? LucideIcons.checkCircle2
                             : LucideIcons.mapPin,
-                        color: isLocationVerified ? Colors.green : Colors.grey,
+                        color:
+                            isLocationVerified ? Colors.green : Colors.grey,
                         size: 20,
                       ),
                       const SizedBox(width: 12),
@@ -601,90 +564,101 @@ class _WateringScreenState extends State<WateringScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              '1. Location Match',
+                              '1. Location Match (within 2 m)',
                               style: GoogleFonts.poppins(
-                                fontSize: 14,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            if (currentPosition != null)
-                              Text(
-                                isLocationVerified
-                                    ? 'Location verified ✓'
-                                    : 'Location: ${currentPosition!.latitude.toStringAsFixed(4)}, ${currentPosition!.longitude.toStringAsFixed(4)}',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  color: cs.onSurface.withOpacity(0.6),
-                                ),
-                              )
-                            else
-                              Text(
-                                'Click to verify location',
-                                style: GoogleFonts.poppins(
-                                  fontSize: 11,
-                                  color: cs.onSurface.withOpacity(0.6),
-                                ),
+                            const SizedBox(height: 2),
+                            Text(
+                              isLocationVerified
+                                  ? '✓ You are at the plant location'
+                                  : currentPosition != null
+                                      ? 'Too far — must be within 2 m of the plant'
+                                      : 'Tap Verify to check your location',
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                color: isLocationVerified
+                                    ? Colors.green.shade700
+                                    : cs.onSurface.withOpacity(0.6),
                               ),
+                            ),
                           ],
                         ),
                       ),
                       if (!isLocationVerified)
                         TextButton(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                          ),
                           onPressed: () async {
                             try {
                               final position =
-                                  await _getCurrentLocation(context);
-                              if (position != null) {
-                                final distance = _calculateDistance(
-                                  position.latitude,
-                                  position.longitude,
-                                  plant.latitude ?? notification.latitude,
-                                  plant.longitude ?? notification.longitude,
-                                );
+                                  await _getCurrentLocation(ctx);
+                              if (position == null) return;
 
-                                setDialogState(() {
-                                  currentPosition = position;
-                                  // Allow up to 100 meters tolerance
-                                  isLocationVerified = distance <= 100;
-                                });
+                              final distanceM = Geolocator.distanceBetween(
+                                position.latitude,
+                                position.longitude,
+                                targetLat,
+                                targetLng,
+                              );
 
-                                if (!isLocationVerified) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'You are ${distance.toStringAsFixed(0)}m away from the plant. Please get closer (within 100m).',
-                                      ),
-                                      backgroundColor: Colors.orange,
+                              setDialogState(() {
+                                currentPosition = position;
+                                // 2-metre radius as requested.
+                                // If the plant has no GPS (both 0,0) we
+                                // allow verification automatically.
+                                isLocationVerified = (targetLat == 0.0 &&
+                                        targetLng == 0.0) ||
+                                    distanceM <= 2.0;
+                              });
+
+                              if (!isLocationVerified && ctx.mounted) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      'You are ${distanceM.toStringAsFixed(1)} m away. '
+                                      'Must be within 2 m to earn coins.',
                                     ),
-                                  );
-                                }
+                                    backgroundColor: Colors.orange,
+                                  ),
+                                );
                               }
                             } catch (e) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Error getting location: $e'),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
+                              if (ctx.mounted) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  SnackBar(
+                                    content:
+                                        Text('Location error: $e'),
+                                    backgroundColor: Colors.red,
+                                  ),
+                                );
+                              }
                             }
                           },
-                          child: const Text('Verify'),
+                          child: Text('Verify',
+                              style: TextStyle(color: cs.primary)),
                         ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 12),
 
-                // Photo Requirement
+                // ── Step 2 — Photo Proof ────────────────────────────────────
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: isPhotoTaken
                         ? Colors.green.withOpacity(0.1)
-                        : Colors.grey.withOpacity(0.1),
+                        : Colors.grey.withOpacity(0.08),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isPhotoTaken ? Colors.green : Colors.grey,
+                      color: isPhotoTaken
+                          ? Colors.green
+                          : Colors.grey.shade300,
                     ),
                   ),
                   child: Column(
@@ -700,13 +674,11 @@ class _WateringScreenState extends State<WateringScreen> {
                             size: 20,
                           ),
                           const SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              '2. Take Photo',
-                              style: GoogleFonts.poppins(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                              ),
+                          Text(
+                            '2. Photo Proof',
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
@@ -717,30 +689,29 @@ class _WateringScreenState extends State<WateringScreen> {
                           borderRadius: BorderRadius.circular(8),
                           child: Image.file(
                             File(capturedImagePath!),
-                            height: 150,
+                            height: 140,
                             width: double.infinity,
                             fit: BoxFit.cover,
                           ),
                         ),
-                      ],
-                      if (!isPhotoTaken) ...[
+                      ] else ...[
                         const SizedBox(height: 8),
                         Row(
                           children: [
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: () async {
-                                  final image = await _picker.pickImage(
-                                    source: ImageSource.camera,
-                                  );
-                                  if (image != null) {
+                                  final img = await _picker.pickImage(
+                                      source: ImageSource.camera);
+                                  if (img != null) {
                                     setDialogState(() {
-                                      capturedImagePath = image.path;
+                                      capturedImagePath = img.path;
                                       isPhotoTaken = true;
                                     });
                                   }
                                 },
-                                icon: const Icon(LucideIcons.camera, size: 16),
+                                icon: const Icon(LucideIcons.camera,
+                                    size: 16),
                                 label: const Text('Camera'),
                               ),
                             ),
@@ -748,17 +719,17 @@ class _WateringScreenState extends State<WateringScreen> {
                             Expanded(
                               child: OutlinedButton.icon(
                                 onPressed: () async {
-                                  final image = await _picker.pickImage(
-                                    source: ImageSource.gallery,
-                                  );
-                                  if (image != null) {
+                                  final img = await _picker.pickImage(
+                                      source: ImageSource.gallery);
+                                  if (img != null) {
                                     setDialogState(() {
-                                      capturedImagePath = image.path;
+                                      capturedImagePath = img.path;
                                       isPhotoTaken = true;
                                     });
                                   }
                                 },
-                                icon: const Icon(LucideIcons.image, size: 16),
+                                icon: const Icon(LucideIcons.image,
+                                    size: 16),
                                 label: const Text('Gallery'),
                               ),
                             ),
@@ -768,93 +739,203 @@ class _WateringScreenState extends State<WateringScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
 
-                // Caution Message
-                if (!isLocationVerified || !isPhotoTaken)
+                // ── Info banner ─────────────────────────────────────────────
+                if (!isLocationVerified || !isPhotoTaken) ...[
+                  const SizedBox(height: 12),
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.orange.withOpacity(0.5),
-                      ),
+                      color: Colors.blue.withOpacity(0.07),
+                      borderRadius: BorderRadius.circular(10),
+                      border:
+                          Border.all(color: Colors.blue.withOpacity(0.3)),
                     ),
                     child: Row(
                       children: [
-                        const Icon(
-                          LucideIcons.alertTriangle,
-                          color: Colors.orange,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 12),
+                        const Icon(LucideIcons.info,
+                            color: Colors.blue, size: 16),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Complete both requirements to earn +50 points',
+                            isPhotoTaken && !isLocationVerified
+                                ? 'Location not verified — you can still mark the task done without coins.'
+                                : 'Both location (2 m) and photo required to earn +5 coins.',
                             style: GoogleFonts.poppins(
-                              fontSize: 12,
-                              color: Colors.orange.shade800,
+                              fontSize: 11,
+                              color: Colors.blue.shade800,
                             ),
                           ),
                         ),
                       ],
                     ),
                   ),
+                ],
               ],
             ),
           ),
           actions: [
-            // Skip button (no points)
-            TextButton.icon(
-              onPressed: () {
-                controller.markAsRead(notification.id);
-                Navigator.of(dialogContext).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content:
-                        Text('${notification.plantName} task marked as done'),
-                    backgroundColor: Colors.grey,
-                  ),
-                );
-              },
-              icon: const Icon(LucideIcons.skipForward, size: 16),
-              label: const Text('Skip (No Points)'),
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.grey,
-              ),
+            // ── Cancel ──────────────────────────────────────────────────────
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child:
+                  Text('Cancel', style: TextStyle(color: Colors.grey.shade600)),
             ),
-            // Complete button (with points)
+
+            // ── Complete without coins (shown when photo taken but no location) ──
+            if (isPhotoTaken && !isLocationVerified)
+              TextButton.icon(
+                onPressed: _isSubmitting
+                    ? null
+                    : () async {
+                        setDialogState(() => _isSubmitting = true);
+                        await _submitWateringTask(
+                          context: ctx,
+                          dialogContext: dialogContext,
+                          notification: notification,
+                          controller: controller,
+                          plantId: plantId,
+                          capturedImagePath: capturedImagePath,
+                          awardCoins: false,
+                        );
+                      },
+                icon: const Icon(LucideIcons.checkCircle, size: 16),
+                label: const Text('Complete Task (No Coins)'),
+                style: TextButton.styleFrom(foregroundColor: Colors.grey),
+              ),
+
+            // ── Complete with +5 coins ───────────────────────────────────────
             ElevatedButton.icon(
-              onPressed: (isLocationVerified && isPhotoTaken)
-                  ? () {
-                      controller.markAsRead(notification.id);
-                      final wallet = Provider.of<WalletController>(
-                        context,
-                        listen: false,
-                      );
-                      wallet.earnPoints(
-                          50, 'Watered ${notification.plantName}');
-                      Navigator.of(dialogContext).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            '${notification.plantName} watered! +50 points 💧',
-                          ),
-                          duration: const Duration(seconds: 2),
-                          backgroundColor: Colors.green,
-                        ),
+              onPressed: (isLocationVerified && isPhotoTaken && !_isSubmitting)
+                  ? () async {
+                      setDialogState(() => _isSubmitting = true);
+                      await _submitWateringTask(
+                        context: ctx,
+                        dialogContext: dialogContext,
+                        notification: notification,
+                        controller: controller,
+                        plantId: plantId,
+                        capturedImagePath: capturedImagePath,
+                        awardCoins: true,
                       );
                     }
                   : null,
-              icon: const Icon(LucideIcons.checkCircle2, size: 16),
-              label: const Text('Complete (+50 pts)'),
+              icon: _isSubmitting
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(LucideIcons.checkCircle2, size: 16),
+              label: const Text('Complete (+5 coins)'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
             ),
           ],
         ),
       ),
     );
   }
+
+  /// Handles the shared submission logic for both coin and no-coin paths:
+  ///  1. Uploads proof photo to Appwrite Storage
+  ///  2. Writes activity_log with actionType='water' (valid enum) so the
+  ///     admin panel Plant History shows the watering image on its timeline
+  ///  3. Awards 5 coins if [awardCoins] is true
+  ///  4. Marks notification as read
+  Future<void> _submitWateringTask({
+    required BuildContext context,
+    required BuildContext dialogContext,
+    required NotificationModel notification,
+    required NotificationController controller,
+    required String plantId,
+    required String? capturedImagePath,
+    required bool awardCoins,
+  }) async {
+    final db = DatabaseService();
+    String proofImageUrl = '';
+
+    // ── Upload proof photo (best-effort) ─────────────────────────────────────
+    if (capturedImagePath != null) {
+      try {
+        final fileId = await db.uploadPlantImage(capturedImagePath);
+        proofImageUrl = db.getPlantImageUrl(fileId);
+      } catch (e) {
+        debugPrint('WateringScreen: photo upload failed: $e');
+        // Non-fatal — continue without image URL
+      }
+    }
+
+    // ── Write activity_log for admin panel history ────────────────────────────
+    // actionType = 'water' (valid Appwrite enum).
+    // The admin plant history detects watering entries via the
+    // rejectionReason meta field type='watering_proof_meta'.
+    try {
+      if (context.mounted) {
+        final auth = Provider.of<AuthController>(context, listen: false);
+        final userId = auth.userId ?? '';
+        final nowIso = DateTime.now().toIso8601String();
+
+        final historyPlantId = await db.resolveCanonicalPlantId(
+          userId: userId,
+          localGardenId: plantId,
+          speciesName: notification.plantName,
+        );
+
+        final historyMeta = {
+          'type': 'watering_proof_meta',
+          'watered_at': nowIso,
+          'plant_name': notification.plantName,
+          'coins_awarded': awardCoins ? 5 : 0,
+          'source_plant_id': plantId,
+          'resolved_plant_id': historyPlantId,
+        };
+
+        await db.createActivityLog(
+          userId: userId,
+          plantId: historyPlantId,
+          communityId: notification.linkedCommunityId,
+          actionType: 'water',
+          coinsAwarded: awardCoins ? 5 : 0,
+          verificationStatus: 'verified',
+          proofImageId: proofImageUrl,
+          rejectionReason: jsonEncode(historyMeta),
+        );
+      }
+    } catch (e) {
+      debugPrint('WateringScreen: createActivityLog failed: $e');
+      // Non-fatal — task is still completed for the user
+    }
+
+    // ── Award coins ──────────────────────────────────────────────────────────
+    if (awardCoins && context.mounted) {
+      final wallet = Provider.of<WalletController>(context, listen: false);
+      wallet.earnPoints(5, 'Watered ${notification.plantName}');
+    }
+
+    // ── Remove notification perfectly ────────────────────────────────────────────
+    controller.removeNotification(notification.id);
+
+    // ── Close dialog and show result ─────────────────────────────────────────
+    if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            awardCoins
+                ? '${notification.plantName} watered! +5 coins earned 💧🌱'
+                : '${notification.plantName} marked as watered (no coins)',
+          ),
+          backgroundColor: awardCoins ? Colors.green : Colors.grey.shade700,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
+
+
 
   Future<Position?> _getCurrentLocation(BuildContext context) async {
     bool serviceEnabled;
@@ -902,18 +983,6 @@ class _WateringScreenState extends State<WateringScreen> {
     }
 
     return await Geolocator.getCurrentPosition();
-  }
-
-  double _calculateDistance(
-    double lat1,
-    double lon1,
-    double? lat2,
-    double? lon2,
-  ) {
-    if (lat2 == null || lon2 == null) {
-      return double.infinity; // Cannot verify without plant location
-    }
-    return Geolocator.distanceBetween(lat1, lon1, lat2, lon2);
   }
 
   String _formatTime(DateTime timestamp) {

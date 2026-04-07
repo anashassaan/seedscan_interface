@@ -890,20 +890,12 @@ class _MyGardenScreenState extends State<MyGardenScreen>
 
                                 setModalState(() => isUploading = true);
                                 try {
-                                  final result =
-                                      await _dbService.updateMyGardenPlantImage(
+                                  await _dbService.updateMyGardenPlantImage(
                                     docId: qr.id,
                                     filePath: picked.path,
                                   );
-                                  final newUrl = result['url']!;
-                                  final newFileId = result['fileId']!;
-
-                                  // Persist in Hive so it survives logout/reload
-                                  await GardenCacheService.updateImage(
-                                      qr.id, newFileId, newUrl);
 
                                   setModalState(() {
-                                    currentImageUrl = newUrl;
                                     isUploading = false;
                                   });
 
@@ -913,8 +905,8 @@ class _MyGardenScreenState extends State<MyGardenScreen>
                                   if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
-                                        content:
-                                            Text('Photo updated successfully!'),
+                                        content: Text(
+                                            'Photo saved to history successfully!'),
                                         backgroundColor: Colors.green,
                                       ),
                                     );
@@ -1826,8 +1818,8 @@ class _MyGardenScreenState extends State<MyGardenScreen>
                                 SnackBar(
                                   content: Text(
                                     result['success'] == true
-                                        ? 'Plant image updated & saved to database at $timeStr'
-                                        : 'Image updated locally (upload failed: ${result['error']})',
+                                        ? 'Plant update saved to history at $timeStr'
+                                        : 'Image upload failed: ${result['error']}',
                                     style: GoogleFonts.poppins(),
                                   ),
                                   backgroundColor: result['success'] == true
@@ -1859,8 +1851,8 @@ class _MyGardenScreenState extends State<MyGardenScreen>
                                 SnackBar(
                                   content: Text(
                                     result['success'] == true
-                                        ? 'Plant image updated & saved to database at $timeStr'
-                                        : 'Image updated locally (upload failed: ${result['error']})',
+                                        ? 'Plant update saved to history at $timeStr'
+                                        : 'Image upload failed: ${result['error']}',
                                     style: GoogleFonts.poppins(),
                                   ),
                                   backgroundColor: result['success'] == true
