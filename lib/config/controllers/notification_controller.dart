@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' show ChangeNotifier;
 import '../../services/push_notification_service.dart';
 import '../../services/database_service.dart';
+import '../../services/garden_cache_service.dart';
 
 class NotificationController extends ChangeNotifier {
   final List<NotificationModel> _notifications = [];
@@ -13,7 +13,9 @@ class NotificationController extends ChangeNotifier {
   int get unreadCount => _notifications.where((n) => !n.isRead).length;
   bool get loading => _loading;
 
-  // ── Initialize: load from Appwrite + subscribe to realtime ────────────────
+  // ── Initialize: load from cache + subscribe to realtime ────────────────
+  /// CACHE-FIRST: Returns immediately after loading from cache.
+  /// Appwrite sync and realtime subscribe happen in true background.
   Future<void> initialize(String userId) async {
     if (_currentUserId == userId) return; // already initialized for this user
 
@@ -27,26 +29,31 @@ class NotificationController extends ChangeNotifier {
     // Initialize local notifications
     await PushNotificationService().initLocalNotifications();
 
-    // Load existing notifications from Appwrite
-    await _loadFromAppwrite(userId);
+    // STEP 1: LOAD FROM CACHE (instant — caller unblocked immediately after this)
+    _loadFromCache(userId);
 
-    // Subscribe to real-time new notifications
-    await PushNotificationService().subscribe(
+    // STEP 2: SYNC FROM APPWRITE (truly background — does NOT block caller)
+    // ignore: unawaited_futures
+    _syncFromAppwrite(userId);
+
+    // STEP 3: Subscribe to real-time new notifications (fire-and-forget)
+    // ignore: unawaited_futures
+    PushNotificationService().subscribe(
       userId: userId,
       onNotification: (data) {
         final existing =
             _notifications.any((n) => n.id == (data['\$id'] ?? ''));
         if (!existing) {
           final model = _fromAppwriteData(data);
-          
-          // Deduplication: If this is a watering notification and we already have an 
+
+          // Deduplication: If this is a watering notification and we already have an
           // unread one for the same plant, skip it.
-          if (model.type == NotificationType.watering && model.linkedPlantId != null) {
-            final duplicate = _notifications.any((n) => 
-              n.type == NotificationType.watering && 
-              n.linkedPlantId == model.linkedPlantId && 
-              !n.isRead
-            );
+          if (model.type == NotificationType.watering &&
+              model.linkedPlantId != null) {
+            final duplicate = _notifications.any((n) =>
+                n.type == NotificationType.watering &&
+                n.linkedPlantId == model.linkedPlantId &&
+                !n.isRead);
             if (duplicate) return;
           }
 
@@ -65,18 +72,80 @@ class NotificationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _loadFromAppwrite(String userId) async {
+  /// Load notifications from Hive cache instantly
+  void _loadFromCache(String userId) {
     _loading = true;
     notifyListeners();
+    try {
+      final cached = GardenCacheService.getCachedNotifications(userId);
+      if (cached != null && cached.isNotEmpty) {
+        _notifications.clear();
+        _notifications.addAll(cached.map((data) => _fromAppwriteData(data)));
+        debugPrint(
+            '[NotificationController] Loaded ${_notifications.length} notifications from cache');
+      }
+    } catch (e) {
+      debugPrint('[NotificationController] _loadFromCache error: $e');
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Sync notifications from Appwrite in background
+  Future<void> _syncFromAppwrite(String userId) async {
     try {
       final list = await _db.listNotifications(userId);
       _notifications.clear();
       _notifications.addAll(list.map(_fromAppwriteNotificationModel).toList());
+      debugPrint(
+          '[NotificationController] Synced ${_notifications.length} notifications from Appwrite');
+
+      // Cache the fetched data
+      final notificationsList = _notifications
+          .map((n) => {
+                'id': n.id,
+                'type': _typeToString(n.type),
+                'title': n.title,
+                'body': n.message,
+                'plant_name': n.plantName,
+                'plant_location': '${n.location}|${n.latitude},${n.longitude}',
+                'created_at': n.timestamp.toIso8601String(),
+                'is_read': n.isRead,
+                'linked_community_id': n.linkedCommunityId,
+                'linked_plant_id': n.linkedPlantId,
+              })
+          .toList();
+      await GardenCacheService.cacheNotifications(userId, notificationsList);
     } catch (e) {
-      debugPrint('[NotificationController] _loadFromAppwrite error: $e');
+      debugPrint(
+          '[NotificationController] Appwrite sync failed (using cached data): $e');
     } finally {
       _loading = false;
       notifyListeners();
+    }
+  }
+
+  String _typeToString(NotificationType type) {
+    switch (type) {
+      case NotificationType.watering:
+        return 'watering';
+      case NotificationType.disease:
+        return 'disease';
+      case NotificationType.health:
+        return 'health';
+      case NotificationType.fertilizer:
+        return 'fertilizer';
+      case NotificationType.pest:
+        return 'pest';
+      case NotificationType.pruning:
+        return 'pruning';
+      case NotificationType.repotting:
+        return 'repotting';
+      case NotificationType.success:
+        return 'success';
+      case NotificationType.reminder:
+        return 'reminder';
     }
   }
 

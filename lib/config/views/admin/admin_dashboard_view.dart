@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../controllers/auth_controller.dart';
@@ -15,9 +15,12 @@ import 'admin_stats_details_view.dart';
 import 'admin_profile_view.dart';
 import 'community_details_view.dart';
 import 'admin_tasks_manager_view.dart';
+import 'admin_withdrawals_view.dart';
 
 class AdminDashboardView extends StatefulWidget {
-  const AdminDashboardView({super.key});
+  final String adminId; // Used to force widget recreation when admin user changes
+
+  const AdminDashboardView({required this.adminId, super.key});
 
   @override
   State<AdminDashboardView> createState() => _AdminDashboardViewState();
@@ -25,6 +28,7 @@ class AdminDashboardView extends StatefulWidget {
 
 class _AdminDashboardViewState extends State<AdminDashboardView> {
   int _currentIndex = 0;
+  String? _loadedForAdminId; // Track which admin user's data is loaded
 
   late final List<Widget> _pages;
 
@@ -39,9 +43,28 @@ class _AdminDashboardViewState extends State<AdminDashboardView> {
     ];
     // Initialize admin data from Appwrite backend
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final admin = Provider.of<AdminController>(context, listen: false);
-      admin.initialize();
+      if (mounted) _initializeAdmin();
     });
+  }
+
+  /// Ensure AdminController data belongs to the current logged-in admin.
+  /// Reset and reload if the admin user changed. This is called on every init since
+  /// the widget is recreated with a new ValueKey when the admin ID changes.
+  void _initializeAdmin() {
+    final auth = Provider.of<AuthController>(context, listen: false);
+    final admin = Provider.of<AdminController>(context, listen: false);
+    final currentAdminId = auth.userId;
+
+    // Always reset on init since widget is recreated for each admin
+    if (currentAdminId != null) {
+      debugPrint(
+          '[AdminDashboardView] Initializing admin dashboard for $currentAdminId');
+      admin.reset();
+      _loadedForAdminId = currentAdminId;
+    }
+
+    // Now initialize/load data for the current admin
+    admin.initialize();
   }
 
   @override
@@ -128,10 +151,10 @@ class _HomeTab extends StatelessWidget {
           width: double.infinity,
           padding: EdgeInsets.fromLTRB(24, topPad + 16, 24, 28),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
+            gradient: const LinearGradient(
               colors: [
-                const Color(0xFF0BA360),
-                const Color(0xFF3CBA92),
+                Color(0xFF0BA360),
+                Color(0xFF3CBA92),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -355,7 +378,19 @@ class _HomeTab extends StatelessWidget {
                         ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: const SizedBox.shrink(),
+                          child: _metricCard(
+                            cs,
+                            title: 'Withdrawals',
+                            value: 'Payouts',
+                            icon: LucideIcons.coins,
+                            color: const Color(
+                                0xFFF59E0B), // Amber color for coins
+                            onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) =>
+                                        const AdminWithdrawalsView())),
+                          ),
                         ),
                       ],
                     ),
@@ -724,8 +759,7 @@ class _HomeTab extends StatelessWidget {
                         overflow: TextOverflow.ellipsis),
                     Text('${c.members.length} members  ·  ${c.location}',
                         style: TextStyle(
-                            fontSize: 11,
-                            color: cs.onSurface.withOpacity(0.5)),
+                            fontSize: 11, color: cs.onSurface.withOpacity(0.5)),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
                   ],
@@ -733,8 +767,7 @@ class _HomeTab extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: c.isActive
                       ? Colors.green.withOpacity(0.1)
@@ -1372,7 +1405,7 @@ class _SettingsTabState extends State<_SettingsTab> {
             child: Switch(
               value: value,
               onChanged: onChanged,
-              activeColor: cs.primary,
+              activeThumbColor: cs.primary,
             ),
           ),
         ],

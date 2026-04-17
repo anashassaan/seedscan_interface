@@ -43,3 +43,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Large Machine Learning Models & Native Libs
+android/app/src/main/jniLibs/
+extra_assets/models/
+assets/models/
+*.tflite
+*.gguf
+*.h5
+*.keras
+*.pt
+*.bin

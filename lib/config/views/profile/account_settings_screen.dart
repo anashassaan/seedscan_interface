@@ -52,9 +52,9 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       _isEditingUsername = false;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+      const SnackBar(
         content: Text('Username updated successfully'),
-        backgroundColor: const Color(0xFF0B6E4F),
+        backgroundColor: Color(0xFF0B6E4F),
       ),
     );
   }
@@ -65,9 +65,9 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
       _isEditingEmail = false;
     });
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+      const SnackBar(
         content: Text('Email updated successfully'),
-        backgroundColor: const Color(0xFF0B6E4F),
+        backgroundColor: Color(0xFF0B6E4F),
       ),
     );
   }
@@ -102,9 +102,9 @@ class _AccountSettingsScreenState extends State<AccountSettingsScreen> {
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+      const SnackBar(
         content: Text('Password changed successfully'),
-        backgroundColor: const Color(0xFF0B6E4F),
+        backgroundColor: Color(0xFF0B6E4F),
       ),
     );
   }

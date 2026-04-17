@@ -166,7 +166,7 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
                       hintText: 'e.g. John Doe',
                       prefixIcon: Icon(LucideIcons.user, color: cs.primary),
                       filled: true,
-                      fillColor: cs.surfaceVariant.withOpacity(0.4),
+                      fillColor: cs.surfaceContainerHighest.withOpacity(0.4),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
                         borderSide: BorderSide.none,
@@ -189,7 +189,7 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
                       hintText: 'e.g. john@example.com',
                       prefixIcon: Icon(LucideIcons.mail, color: cs.primary),
                       filled: true,
-                      fillColor: cs.surfaceVariant.withOpacity(0.4),
+                      fillColor: cs.surfaceContainerHighest.withOpacity(0.4),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
                         borderSide: BorderSide.none,
@@ -200,8 +200,9 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
                       ),
                     ),
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty)
+                      if (v == null || v.trim().isEmpty) {
                         return 'Email is required';
+                      }
                       if (!v.contains('@')) return 'Enter a valid email';
                       return null;
                     },
@@ -381,7 +382,7 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
               width: double.infinity,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(18),
-                color: cs.surfaceVariant.withOpacity(0.3),
+                color: cs.surfaceContainerHighest.withOpacity(0.3),
               ),
               clipBehavior: Clip.antiAlias,
               child: Stack(
@@ -458,7 +459,7 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
               width: double.infinity,
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: cs.surfaceVariant.withOpacity(0.3),
+                color: cs.surfaceContainerHighest.withOpacity(0.3),
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(color: cs.outlineVariant),
               ),
@@ -565,7 +566,7 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
                     child: Material(
-                      color: cs.surfaceVariant.withOpacity(0.25),
+                      color: cs.surfaceContainerHighest.withOpacity(0.25),
                       borderRadius: BorderRadius.circular(18),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(18),
@@ -727,7 +728,7 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
                                     color: user.role == 'Admin'
                                         ? cs.errorContainer
                                             .withValues(alpha: 0.5)
-                                        : cs.surfaceVariant
+                                        : cs.surfaceContainerHighest
                                             .withValues(alpha: 0.6),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
@@ -748,7 +749,7 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
                               padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
                                 color:
-                                    cs.surfaceVariant.withValues(alpha: 0.25),
+                                    cs.surfaceContainerHighest.withValues(alpha: 0.25),
                                 borderRadius: BorderRadius.circular(14),
                               ),
                               child: Column(
@@ -846,7 +847,7 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
                                         children: [
                                           TableRow(
                                             decoration: BoxDecoration(
-                                                color: cs.surfaceVariant
+                                                color: cs.surfaceContainerHighest
                                                     .withValues(alpha: 0.5)),
                                             children: [
                                               _tableHeader("Plant"),
@@ -994,7 +995,7 @@ class _CommunityDetailsViewState extends State<CommunityDetailsView> {
   }) {
     final cs = Theme.of(context).colorScheme;
     return Material(
-      color: cs.surfaceVariant.withOpacity(0.3),
+      color: cs.surfaceContainerHighest.withOpacity(0.3),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,

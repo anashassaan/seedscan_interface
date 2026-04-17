@@ -15,9 +15,9 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: colorScheme.background,
+      scaffoldBackgroundColor: colorScheme.surface,
       textTheme: GoogleFonts.interTextTheme().apply(
-        bodyColor: colorScheme.onBackground,
+        bodyColor: colorScheme.onSurface,
       ),
       primaryColor: colorScheme.primary,
       appBarTheme: AppBarTheme(
@@ -43,7 +43,7 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: colorScheme.surfaceVariant,
+        fillColor: colorScheme.surfaceContainerHighest,
         contentPadding: const EdgeInsets.symmetric(
           vertical: 14,
           horizontal: 16,
@@ -73,10 +73,10 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: colorScheme.background,
+      scaffoldBackgroundColor: colorScheme.surface,
       textTheme: GoogleFonts.interTextTheme().apply(
-        bodyColor: colorScheme.onBackground,
-        displayColor: colorScheme.onBackground,
+        bodyColor: colorScheme.onSurface,
+        displayColor: colorScheme.onSurface,
       ),
       primaryColor: colorScheme.primary,
       appBarTheme: AppBarTheme(
@@ -102,7 +102,7 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: colorScheme.surfaceVariant,
+        fillColor: colorScheme.surfaceContainerHighest,
         contentPadding: const EdgeInsets.symmetric(
           vertical: 14,
           horizontal: 16,

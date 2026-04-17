@@ -292,7 +292,7 @@ class _WateringScreenState extends State<WateringScreen> {
                         ],
                       ),
                     ),
-                    PopupMenuItem(
+                    const PopupMenuItem(
                       value: 'delete',
                       child: Row(
                         children: [
@@ -301,8 +301,8 @@ class _WateringScreenState extends State<WateringScreen> {
                             size: 18,
                             color: Colors.red,
                           ),
-                          const SizedBox(width: 12),
-                          const Text('Delete',
+                          SizedBox(width: 12),
+                          Text('Delete',
                               style: TextStyle(color: Colors.red)),
                         ],
                       ),
@@ -462,7 +462,7 @@ class _WateringScreenState extends State<WateringScreen> {
     Position? currentPosition;
     bool isLocationVerified = false;
     bool isPhotoTaken = false;
-    bool _isSubmitting = false;
+    bool isSubmitting = false;
 
     await showDialog(
       context: context,
@@ -785,10 +785,10 @@ class _WateringScreenState extends State<WateringScreen> {
             // ── Complete without coins (shown when photo taken but no location) ──
             if (isPhotoTaken && !isLocationVerified)
               TextButton.icon(
-                onPressed: _isSubmitting
+                onPressed: isSubmitting
                     ? null
                     : () async {
-                        setDialogState(() => _isSubmitting = true);
+                        setDialogState(() => isSubmitting = true);
                         await _submitWateringTask(
                           context: ctx,
                           dialogContext: dialogContext,
@@ -806,9 +806,9 @@ class _WateringScreenState extends State<WateringScreen> {
 
             // ── Complete with +5 coins ───────────────────────────────────────
             ElevatedButton.icon(
-              onPressed: (isLocationVerified && isPhotoTaken && !_isSubmitting)
+              onPressed: (isLocationVerified && isPhotoTaken && !isSubmitting)
                   ? () async {
-                      setDialogState(() => _isSubmitting = true);
+                      setDialogState(() => isSubmitting = true);
                       await _submitWateringTask(
                         context: ctx,
                         dialogContext: dialogContext,
@@ -820,7 +820,7 @@ class _WateringScreenState extends State<WateringScreen> {
                       );
                     }
                   : null,
-              icon: _isSubmitting
+              icon: isSubmitting
                   ? const SizedBox(
                       width: 14,
                       height: 14,

@@ -26,15 +26,28 @@ class AppwriteConstants {
   static const String adminQrCodesCollection = 'admin_qr_codes';
   static const String customTasksCollection = 'custom_tasks';
   static const String systemLogsCollection = 'system_logs';
+  static const String withdrawalsCollection = 'withdrawals';
 
   // ── Storage Bucket IDs ────────────────────────────────────────────────────
   static const String plantImagesBucket = 'plant_images';
   static const String communityMediaBucket = 'community_media';
+  static const String profileImagesBucket = 'profile_images';
+
+  // ── AI Model Bucket ───────────────────────────────────────────────────────
+  /// Appwrite Storage bucket that holds all on-device model files.
+  static const String modelsBucket = 'ml_models';
+
+  /// File IDs inside [modelsBucket].
+  static const String seedscanV7GgufFileId = 'seedscan_v7_q4km';
+  static const String bestFloat32TfliteFileId = 'best_float32.tflite';
+  static const String mobilenetV3TfliteFileId =
+      'mobilenetv3_large_disease_updted';
 
   // ── Cloud Function IDs ────────────────────────────────────────────────────
   static const String verifyActionFunctionId = '69722863001c67722e75';
   static const String joinCommunityFunctionId = 'join_community';
   static const String sendNotificationFunctionId = 'send_notification';
+  static const String requestWithdrawalFunctionId = 'request_withdrawal';
 
   // ── Enums (for validation) ────────────────────────────────────────────────
   static const List<String> healthStatuses = [

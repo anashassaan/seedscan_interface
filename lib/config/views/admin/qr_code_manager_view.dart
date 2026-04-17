@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -126,7 +125,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
     const double borderW = 6;
     const double radius = 28;
     final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, cardW, cardH));
+    final canvas = Canvas(recorder, const Rect.fromLTWH(0, 0, cardW, cardH));
 
     // Green border
     final borderPaint = Paint()..color = const Color(0xFF0B6E4F);
@@ -139,7 +138,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
     final fillPaint = Paint()..color = const Color(0xFFFFFFFF);
     canvas.drawRRect(
         RRect.fromRectAndRadius(
-            Rect.fromLTWH(
+            const Rect.fromLTWH(
                 borderW, borderW, cardW - borderW * 2, cardH - borderW * 2),
             const Radius.circular(radius - 4)),
         fillPaint);
@@ -158,8 +157,8 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
       final codec =
           await ui.instantiateImageCodec(qrImage.buffer.asUint8List());
       final frame = await codec.getNextFrame();
-      final dx = (cardW - qrSize) / 2;
-      canvas.drawImage(frame.image, Offset(dx, pad), Paint());
+      const dx = (cardW - qrSize) / 2;
+      canvas.drawImage(frame.image, const Offset(dx, pad), Paint());
     }
 
     // Plant name (bold, large)
@@ -169,17 +168,17 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
       ..addText(code.displayLabel);
     final nameLayout = nameParagraph.build()
       ..layout(const ui.ParagraphConstraints(width: cardW - pad * 2));
-    canvas.drawParagraph(nameLayout, Offset(pad, pad + qrSize + 16));
+    canvas.drawParagraph(nameLayout, const Offset(pad, pad + qrSize + 16));
 
     // ID badge (green rounded rect, centered)
     final idText = code.id;
-    final badgeMaxW = cardW - pad * 2;
+    const badgeMaxW = cardW - pad * 2;
     final idPb = ui.ParagraphBuilder(ui.ParagraphStyle(
         textAlign: TextAlign.center, fontSize: 18, fontWeight: FontWeight.w700))
       ..pushStyle(ui.TextStyle(color: const Color(0xFF1A1A1A)))
       ..addText(idText);
     final idLayout = idPb.build()
-      ..layout(ui.ParagraphConstraints(width: badgeMaxW));
+      ..layout(const ui.ParagraphConstraints(width: badgeMaxW));
     final badgeContentW = idLayout.longestLine + 48;
     final badgeW = badgeContentW > badgeMaxW ? badgeMaxW : badgeContentW;
     final badgeH = idLayout.height + 20;
@@ -671,8 +670,8 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('QR Manager',
-            style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('QR Manager',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         bottom: TabBar(
           controller: _tabController,
           labelColor: cs.primary,
@@ -799,7 +798,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: cs.surfaceVariant.withOpacity(0.25),
+              color: cs.surfaceContainerHighest.withOpacity(0.25),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
             ),
@@ -849,7 +848,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: _selectedPlantType,
+                        initialValue: _selectedPlantType,
                         isDense: true,
                         isExpanded: true,
                         decoration: InputDecoration(
@@ -881,7 +880,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
                     const SizedBox(width: 12),
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: _selectedSeason,
+                        initialValue: _selectedSeason,
                         isDense: true,
                         isExpanded: true,
                         decoration: InputDecoration(
@@ -946,7 +945,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
                         selected: {_isSeed},
                         onSelectionChanged: (v) =>
                             setState(() => _isSeed = v.first),
-                        style: ButtonStyle(
+                        style: const ButtonStyle(
                           visualDensity: VisualDensity.compact,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
@@ -1015,7 +1014,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
                 hintText: 'e.g. 10, 50, 100',
                 prefixIcon: Icon(LucideIcons.hash, color: cs.primary),
                 filled: true,
-                fillColor: cs.surfaceVariant.withOpacity(0.4),
+                fillColor: cs.surfaceContainerHighest.withOpacity(0.4),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
                   borderSide: BorderSide.none,
@@ -1200,7 +1199,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
             width: double.infinity,
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              color: cs.surfaceVariant.withOpacity(0.3),
+              color: cs.surfaceContainerHighest.withOpacity(0.3),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(color: cs.outlineVariant),
             ),
@@ -1271,7 +1270,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
               width: double.infinity,
               height: 160,
               decoration: BoxDecoration(
-                color: cs.surfaceVariant.withOpacity(0.3),
+                color: cs.surfaceContainerHighest.withOpacity(0.3),
                 borderRadius: BorderRadius.circular(18),
                 border: Border.all(
                   color: _csvFileName != null
@@ -1347,7 +1346,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
                   headingRowColor: WidgetStatePropertyAll(
-                      cs.surfaceVariant.withOpacity(0.5)),
+                      cs.surfaceContainerHighest.withOpacity(0.5)),
                   columns: _csvData.isNotEmpty
                       ? _csvData[0]
                           .map((h) => DataColumn(
@@ -1407,7 +1406,7 @@ class _QrCodeManagerViewState extends State<QrCodeManagerView>
     bool isPrimary = false,
   }) {
     return Material(
-      color: isPrimary ? cs.primary : cs.surfaceVariant.withOpacity(0.4),
+      color: isPrimary ? cs.primary : cs.surfaceContainerHighest.withOpacity(0.4),
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         onTap: onTap,

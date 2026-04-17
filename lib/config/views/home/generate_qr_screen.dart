@@ -577,7 +577,7 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: _selectedCategory,
+              initialValue: _selectedCategory,
               decoration: InputDecoration(
                 prefixIcon: const Icon(LucideIcons.tags),
                 border: OutlineInputBorder(
@@ -606,7 +606,7 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
-              value: _selectedSeason,
+              initialValue: _selectedSeason,
               decoration: InputDecoration(
                 prefixIcon: const Icon(LucideIcons.sun),
                 border: OutlineInputBorder(
@@ -696,7 +696,7 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
         decoration: BoxDecoration(
           color: isSelected
               ? cs.primary.withOpacity(0.15)
-              : cs.surfaceVariant.withOpacity(0.4),
+              : cs.surfaceContainerHighest.withOpacity(0.4),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: isSelected ? cs.primary : cs.outline.withOpacity(0.3),
@@ -928,7 +928,7 @@ class _GenerateQRScreenState extends State<GenerateQRScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: cs.surfaceVariant.withOpacity(0.5),
+              color: cs.surfaceContainerHighest.withOpacity(0.5),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Column(

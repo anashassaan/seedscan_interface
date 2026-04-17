@@ -210,7 +210,7 @@ class _CommunityCard extends StatelessWidget {
                           errorBuilder: (context, error, stackTrace) {
                             return Container(
                               height: 160,
-                              color: cs.surfaceVariant,
+                              color: cs.surfaceContainerHighest,
                               child: Icon(
                                 LucideIcons.image,
                                 size: 64,
@@ -221,7 +221,7 @@ class _CommunityCard extends StatelessWidget {
                         )
                       : Container(
                           height: 160,
-                          color: cs.surfaceVariant,
+                          color: cs.surfaceContainerHighest,
                           child: Icon(
                             LucideIcons.users,
                             size: 64,

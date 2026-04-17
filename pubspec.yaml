@@ -35,6 +35,13 @@ dependencies:
   geolocator: ^10.1.0
   permission_handler: ^11.0.1
 
+  # LLM / Offline AI
+  fllama:
+    git:
+      url: https://github.com/Telosnex/fllama.git
+      ref: 8329b36477a6d02d9c4a1f93cf15c7cc3e3197ed
+  dio: ^5.4.0
+  
   # Utilities
   flutter_svg: ^1.1.6
   intl: ^0.18.0
@@ -53,6 +60,8 @@ dependencies:
   hive_flutter: ^1.1.0
   flutter_local_notifications: ^17.2.3
   http: ^1.2.0
+  shared_preferences: ^2.2.2
+  connectivity_plus: ^6.1.0
 
 dev_dependencies:
   flutter_test:
@@ -67,7 +76,10 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/
-    - assets/models/
+    # GGUF model removed from assets — downloaded at runtime from Appwrite Storage
+    # to keep APK size under 50 MB. See LLMService / OfflineChatService.
+    - assets/models/best_float32.tflite
+    - assets/models/mobilenetv3_large_disease_updted.tflite
 
 # icons_launcher:
 #   image_path: "assets/images/logo.png"

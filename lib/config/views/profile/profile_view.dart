@@ -49,7 +49,8 @@ class _ProfileViewState extends State<ProfileView> {
     final XFile? image = await _picker.pickImage(source: source);
     if (image != null) {
       final auth = Provider.of<AuthController>(context, listen: false);
-      auth.updateProfile(name: _nameController.text, imagePath: image.path);
+      // Automatically triggers Appwrite cloud upload and state update
+      auth.uploadAvatar(image.path);
     }
   }
 
@@ -116,7 +117,7 @@ class _ProfileViewState extends State<ProfileView> {
     setState(() {
       if (_isEditing) {
         final auth = Provider.of<AuthController>(context, listen: false);
-        auth.updateProfile(name: _nameController.text);
+        auth.updateProfileName(_nameController.text);
       }
       _isEditing = !_isEditing;
     });
@@ -141,12 +142,8 @@ class _ProfileViewState extends State<ProfileView> {
     final totalCommunities = createdCount + joinedCount;
 
     ImageProvider? profileImageProvider;
-    if (auth.profileImage != null) {
-      profileImageProvider = FileImage(File(auth.profileImage!));
-    } else {
-      profileImageProvider = const NetworkImage(
-        'https://randomuser.me/api/portraits/men/45.jpg',
-      );
+    if (auth.profileImageUrl != null) {
+      profileImageProvider = NetworkImage(auth.profileImageUrl!);
     }
 
     return Scaffold(
@@ -161,13 +158,13 @@ class _ProfileViewState extends State<ProfileView> {
             backgroundColor: const Color(0xFF0B6E4F),
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                     colors: [
-                      const Color(0xFF0B6E4F),
-                      const Color(0xFF159A6E),
+                      Color(0xFF0B6E4F),
+                      Color(0xFF159A6E),
                     ],
                   ),
                 ),
@@ -187,7 +184,20 @@ class _ProfileViewState extends State<ProfileView> {
                             ),
                             child: CircleAvatar(
                               radius: 50,
+                              backgroundColor: const Color(0xFF0B6E4F).withValues(alpha: 0.1),
                               backgroundImage: profileImageProvider,
+                              child: auth.isUploadingAvatar
+                                ? const CircularProgressIndicator(color: Colors.white)
+                                : profileImageProvider == null
+                                  ? Text(
+                                      auth.userInitials,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 32,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : null,
                             ),
                           ),
                           Positioned(
@@ -669,7 +679,7 @@ class _ProfileViewState extends State<ProfileView> {
                         ),
                       ),
                       value: isDark,
-                      activeColor: const Color(0xFF0B6E4F),
+                      activeThumbColor: const Color(0xFF0B6E4F),
                       onChanged: (_) => themeController.toggleTheme(),
                     ),
                   ),

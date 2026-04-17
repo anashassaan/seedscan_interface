@@ -10,6 +10,7 @@ class UserModel {
   final int walletBalance;
   final int currentStreak;
   final List<String> joinedDrives;
+  final String? profileImageId;
   final DateTime createdAt;
 
   UserModel({
@@ -21,6 +22,7 @@ class UserModel {
     this.walletBalance = 0,
     this.currentStreak = 0,
     this.joinedDrives = const [],
+    this.profileImageId,
     required this.createdAt,
   });
 
@@ -37,6 +39,7 @@ class UserModel {
       currentStreak: json['current_streak'] ?? 0,
       joinedDrives:
           (json['joined_drives'] as List? ?? []).whereType<String>().toList(),
+      profileImageId: json['profile_image_id'],
       createdAt: DateTime.tryParse(
             json['created_at'] ?? json['\$createdAt'] ?? '',
           ) ??
@@ -53,6 +56,7 @@ class UserModel {
       'wallet_balance': walletBalance,
       'current_streak': currentStreak,
       'joined_drives': joinedDrives,
+      'profile_image_id': profileImageId,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -66,6 +70,7 @@ class UserModel {
     int? walletBalance,
     int? currentStreak,
     List<String>? joinedDrives,
+    String? profileImageId,
     DateTime? createdAt,
   }) {
     return UserModel(
@@ -77,6 +82,7 @@ class UserModel {
       walletBalance: walletBalance ?? this.walletBalance,
       currentStreak: currentStreak ?? this.currentStreak,
       joinedDrives: joinedDrives ?? this.joinedDrives,
+      profileImageId: profileImageId ?? this.profileImageId,
       createdAt: createdAt ?? this.createdAt,
     );
   }

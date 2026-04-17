@@ -44,10 +44,10 @@ class _CoinAnalyticsViewState extends State<CoinAnalyticsView>
             width: double.infinity,
             padding: EdgeInsets.fromLTRB(24, topPad + 16, 24, 28),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 colors: [
-                  const Color(0xFF0BA360),
-                  const Color(0xFF3CBA92),
+                  Color(0xFF0BA360),
+                  Color(0xFF3CBA92),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -454,11 +454,11 @@ class _OverviewTab extends StatelessWidget {
     // Use real scan data from admin controller
     // If no disease data, show empty state
     final diseases = [
-      _DiseaseEntry('Apple Scab', 0, const Color(0xFFE53935)),
-      _DiseaseEntry('Black Rot', 0, const Color(0xFFFF8F00)),
-      _DiseaseEntry('Cedar Rust', 0, const Color(0xFFFF6F00)),
-      _DiseaseEntry('Powdery Mildew', 0, const Color(0xFF5C6BC0)),
-      _DiseaseEntry('Healthy', 0, const Color(0xFF2E7D32)),
+      const _DiseaseEntry('Apple Scab', 0, Color(0xFFE53935)),
+      const _DiseaseEntry('Black Rot', 0, Color(0xFFFF8F00)),
+      const _DiseaseEntry('Cedar Rust', 0, Color(0xFFFF6F00)),
+      const _DiseaseEntry('Powdery Mildew', 0, Color(0xFF5C6BC0)),
+      const _DiseaseEntry('Healthy', 0, Color(0xFF2E7D32)),
     ];
     final total = diseases.fold<int>(0, (s, d) => s + d.count);
 
@@ -618,7 +618,7 @@ class _UsersTab extends StatelessWidget {
     final totalStats = users.fold<int>(0, (s, u) => s + u.stats.length);
     final avgSession = users.isEmpty
         ? '—'
-        : '${(totalStats / users.length).toStringAsFixed(1)}';
+        : (totalStats / users.length).toStringAsFixed(1);
 
     // New registrations in the selected period
     DateTime periodStart;

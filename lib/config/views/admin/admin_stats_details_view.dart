@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -60,8 +59,8 @@ class _AutoNotificationSenderPageState
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [const Color(0xFF0BA360), const Color(0xFF3CBA92)],
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0BA360), Color(0xFF3CBA92)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -365,10 +364,10 @@ class _TreeScansStatsPageState extends State<TreeScansStatsPage>
             width: double.infinity,
             padding: EdgeInsets.fromLTRB(20, topPad + 12, 20, 24),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 colors: [
-                  const Color(0xFF0BA360),
-                  const Color(0xFF3CBA92),
+                  Color(0xFF0BA360),
+                  Color(0xFF3CBA92),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -998,10 +997,10 @@ class _TreeScansStatsPageState extends State<TreeScansStatsPage>
                   children: [
                     Text(
                       '${healthyPercent.toStringAsFixed(0)}%',
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.w800,
-                        color: const Color(0xFF0BA360),
+                        color: Color(0xFF0BA360),
                       ),
                     ),
                     Text(
@@ -1407,8 +1406,9 @@ class _CustomNotificationSenderPageState
         if (_selectedPlantType == null) break;
         final speciesOwners = admin.getUserIdsForSpecies(_selectedPlantType!);
         for (var community in admin.communities) {
-          if (!_allCommunities && community.name != _selectedCommunity)
+          if (!_allCommunities && community.name != _selectedCommunity) {
             continue;
+          }
           for (var member in community.members) {
             if (member.id.isNotEmpty && speciesOwners.contains(member.id)) {
               count++;
@@ -1451,8 +1451,8 @@ class _CustomNotificationSenderPageState
               width: double.infinity,
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [const Color(0xFF6366F1), const Color(0xFF8B5CF6)],
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
@@ -2104,7 +2104,7 @@ class _HealthPieChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2;
-    final strokeWidth = 16.0;
+    const strokeWidth = 16.0;
     final rect =
         Rect.fromCircle(center: center, radius: radius - strokeWidth / 2);
 

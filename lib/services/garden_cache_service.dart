@@ -9,10 +9,15 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import '../models/community_model.dart';
 
 class GardenCacheService {
   static const String _boxName = 'garden_cache';
   static const String _plantsBoxName = 'community_plants_cache';
+  static const String _communitiesBoxName = 'communities_cache';
+  static const String _walletBoxName = 'wallet_cache';
+  static const String _notificationBoxName = 'notification_cache';
+  static const String _withdrawalBoxName = 'withdrawal_cache';
   static bool _ready = false;
 
   // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -25,6 +30,18 @@ class GardenCacheService {
       }
       if (!Hive.isBoxOpen(_plantsBoxName)) {
         await Hive.openBox<String>(_plantsBoxName);
+      }
+      if (!Hive.isBoxOpen(_communitiesBoxName)) {
+        await Hive.openBox<String>(_communitiesBoxName);
+      }
+      if (!Hive.isBoxOpen(_walletBoxName)) {
+        await Hive.openBox<String>(_walletBoxName);
+      }
+      if (!Hive.isBoxOpen(_notificationBoxName)) {
+        await Hive.openBox<String>(_notificationBoxName);
+      }
+      if (!Hive.isBoxOpen(_withdrawalBoxName)) {
+        await Hive.openBox<String>(_withdrawalBoxName);
       }
       _ready = true;
     } catch (e) {
@@ -46,6 +63,42 @@ class GardenCacheService {
     try {
       if (!_ready || !Hive.isBoxOpen(_plantsBoxName)) return null;
       return Hive.box<String>(_plantsBoxName);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Box<String>? get _communitiesBox {
+    try {
+      if (!_ready || !Hive.isBoxOpen(_communitiesBoxName)) return null;
+      return Hive.box<String>(_communitiesBoxName);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Box<String>? get _walletBox {
+    try {
+      if (!_ready || !Hive.isBoxOpen(_walletBoxName)) return null;
+      return Hive.box<String>(_walletBoxName);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Box<String>? get _notificationBox {
+    try {
+      if (!_ready || !Hive.isBoxOpen(_notificationBoxName)) return null;
+      return Hive.box<String>(_notificationBoxName);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Box<String>? get _withdrawalBox {
+    try {
+      if (!_ready || !Hive.isBoxOpen(_withdrawalBoxName)) return null;
+      return Hive.box<String>(_withdrawalBoxName);
     } catch (_) {
       return null;
     }
@@ -149,8 +202,6 @@ class GardenCacheService {
     }
   }
 
-  // ── Delete ───────────────────────────────────────────────────────────────
-
   /// Persist all plants for a community (overwrites previous cache).
   static Future<void> saveCommunityPlants(
     String communityId,
@@ -190,9 +241,180 @@ class GardenCacheService {
       if (box != null) await box.clear();
       final plantsBox = _plantsBox;
       if (plantsBox != null) await plantsBox.clear();
+      final communitiesBox = _communitiesBox;
+      if (communitiesBox != null) await communitiesBox.clear();
+      final walletBox = _walletBox;
+      if (walletBox != null) await walletBox.clear();
+      final notificationBox = _notificationBox;
+      if (notificationBox != null) await notificationBox.clear();
+      final withdrawalBox = _withdrawalBox;
+      if (withdrawalBox != null) await withdrawalBox.clear();
       // _ready stays true: the box remains open, just emptied
     } catch (e) {
       debugPrint('GardenCacheService.clearAll error: $e');
+    }
+  }
+
+  // ── Communities Cache ────────────────────────────────────────────────────
+
+  /// Cache all communities for [userId]
+  static Future<void> cacheCommunities(
+    String userId,
+    List<Community> communities,
+  ) async {
+    try {
+      final box = _communitiesBox;
+      if (box == null) return;
+      final maps = communities.map((c) => c.toJson()).toList();
+      await box.put(userId, jsonEncode(maps));
+      debugPrint(
+          '[GardenCacheService] Cached ${communities.length} communities for user $userId');
+    } catch (e) {
+      debugPrint('GardenCacheService.cacheCommunities error: $e');
+    }
+  }
+
+  /// Get cached communities for [userId]
+  static List<Community>? getCachedCommunities(String userId) {
+    try {
+      final box = _communitiesBox;
+      if (box == null) return null;
+      final raw = box.get(userId);
+      if (raw == null || raw.isEmpty) return null;
+      final list = jsonDecode(raw) as List;
+      return list
+          .whereType<Map>()
+          .map((e) => Community.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (e) {
+      debugPrint('GardenCacheService.getCachedCommunities error: $e');
+      return null;
+    }
+  }
+
+  /// Get all cached QR details (for instant load on app start)
+  static List<Map<String, dynamic>>? getAllCachedQRetails() {
+    try {
+      final box = _box;
+      if (box == null || box.isEmpty) return null;
+
+      final result = <Map<String, dynamic>>[];
+      for (final key in box.keys) {
+        try {
+          final raw = box.get(key);
+          if (raw != null && raw.isNotEmpty) {
+            final map = jsonDecode(raw) as Map;
+            final dataMap = Map<String, dynamic>.from(map);
+            dataMap['docId'] = key.toString(); // Inject the key as docId
+            result.add(dataMap);
+          }
+        } catch (_) {
+          // Skip malformed entries
+        }
+      }
+      return result.isNotEmpty ? result : null;
+    } catch (e) {
+      debugPrint('GardenCacheService.getAllCachedQRetails error: $e');
+      return null;
+    }
+  }
+
+  // ── Wallet Cache ─────────────────────────────────────────────────────────
+
+  /// Cache wallet data (points + transactions) for [userId]
+  static Future<void> cacheWalletData(
+    String userId,
+    Map<String, dynamic> walletData,
+  ) async {
+    try {
+      final box = _walletBox;
+      if (box == null) return;
+      await box.put(userId, jsonEncode(walletData));
+      debugPrint('[GardenCacheService] Cached wallet data for user $userId');
+    } catch (e) {
+      debugPrint('GardenCacheService.cacheWalletData error: $e');
+    }
+  }
+
+  /// Get cached wallet data for [userId]
+  static Map<String, dynamic>? getCachedWalletData(String userId) {
+    try {
+      final box = _walletBox;
+      if (box == null) return null;
+      final raw = box.get(userId);
+      if (raw == null || raw.isEmpty) return null;
+      return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    } catch (e) {
+      debugPrint('GardenCacheService.getCachedWalletData error: $e');
+      return null;
+    }
+  }
+
+  // ── Notification Cache ───────────────────────────────────────────────────
+
+  /// Cache all notifications for [userId]
+  static Future<void> cacheNotifications(
+    String userId,
+    List<Map<String, dynamic>> notifications,
+  ) async {
+    try {
+      final box = _notificationBox;
+      if (box == null) return;
+      await box.put(userId, jsonEncode(notifications));
+      debugPrint(
+          '[GardenCacheService] Cached ${notifications.length} notifications for user $userId');
+    } catch (e) {
+      debugPrint('GardenCacheService.cacheNotifications error: $e');
+    }
+  }
+
+  /// Get cached notifications for [userId]
+  static List<Map<String, dynamic>>? getCachedNotifications(String userId) {
+    try {
+      final box = _notificationBox;
+      if (box == null) return null;
+      final raw = box.get(userId);
+      if (raw == null || raw.isEmpty) return null;
+      final list = jsonDecode(raw) as List;
+      return list
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
+    } catch (e) {
+      debugPrint('GardenCacheService.getCachedNotifications error: $e');
+      return null;
+    }
+  }
+
+  // ── Withdrawal Cache ─────────────────────────────────────────────────────
+
+  /// Cache withdrawal data (history + pending) for [userId]
+  static Future<void> cacheWithdrawalData(
+    String userId,
+    Map<String, dynamic> withdrawalData,
+  ) async {
+    try {
+      final box = _withdrawalBox;
+      if (box == null) return;
+      await box.put(userId, jsonEncode(withdrawalData));
+      debugPrint(
+          '[GardenCacheService] Cached withdrawal data for user $userId');
+    } catch (e) {
+      debugPrint('GardenCacheService.cacheWithdrawalData error: $e');
+    }
+  }
+
+  /// Get cached withdrawal data for [userId]
+  static Map<String, dynamic>? getCachedWithdrawalData(String userId) {
+    try {
+      final box = _withdrawalBox;
+      if (box == null) return null;
+      final raw = box.get(userId);
+      if (raw == null || raw.isEmpty) return null;
+      return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    } catch (e) {
+      debugPrint('GardenCacheService.getCachedWithdrawalData error: $e');
+      return null;
     }
   }
 

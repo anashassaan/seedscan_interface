@@ -167,7 +167,7 @@ class _MemberPlantsViewState extends State<MemberPlantsView> {
                                   Container(
                                     width: 100,
                                     height: 100,
-                                    color: cs.surfaceVariant,
+                                    color: cs.surfaceContainerHighest,
                                     child: plant.imageUrl.isNotEmpty
                                         ? CachedNetworkImage(
                                             imageUrl: plant.imageUrl,

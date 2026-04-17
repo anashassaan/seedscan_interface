@@ -1,7 +1,7 @@
 // lib/controllers/wallet_controller.dart
 import 'package:flutter/material.dart';
 import '../../services/database_service.dart';
-import '../../models/transaction_model.dart' as tm;
+import '../../services/garden_cache_service.dart';
 
 class WalletController extends ChangeNotifier {
   int _points = 0;
@@ -17,6 +17,8 @@ class WalletController extends ChangeNotifier {
 
   WalletController();
 
+  /// Load wallet data: instant cache → background sync
+  /// Returns immediately after showing cached data; Appwrite syncs silently.
   Future<void> fetchWalletData(String userId) async {
     if (_userId != userId) {
       _points = 0;
@@ -24,6 +26,45 @@ class WalletController extends ChangeNotifier {
     }
 
     _userId = userId;
+
+    // STEP 1: LOAD FROM CACHE (instant — shown to user right away)
+    _loadFromCache(userId);
+
+    // STEP 2: SYNC FROM APPWRITE (truly background — caller is NOT blocked)
+    // ignore: unawaited_futures
+    _syncFromAppwrite(userId);
+  }
+
+  /// Load wallet data from Hive cache instantly
+  void _loadFromCache(String userId) {
+    try {
+      final cached = GardenCacheService.getCachedWalletData(userId);
+      if (cached != null) {
+        _points = cached['points'] as int? ?? 0;
+        final transactionsList = cached['transactions'] as List? ?? [];
+        _transactions = transactionsList.whereType<Map>().map((t) {
+          return Transaction(
+            id: t['id'] as String? ?? '',
+            type: (t['type'] as String?) == 'earn'
+                ? TransactionType.earn
+                : TransactionType.spend,
+            amount: t['amount'] as int? ?? 0,
+            description: t['description'] as String? ?? '',
+            timestamp: DateTime.tryParse(t['timestamp'] as String? ?? '') ??
+                DateTime.now(),
+          );
+        }).toList();
+        debugPrint(
+            '[WalletController] Loaded from cache: $_points points, ${_transactions.length} transactions');
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[WalletController] Cache load error: $e');
+    }
+  }
+
+  /// Sync wallet data from Appwrite in background
+  Future<void> _syncFromAppwrite(String userId) async {
     _isLoading = true;
     notifyListeners();
 
@@ -53,8 +94,26 @@ class WalletController extends ChangeNotifier {
 
       // Sort by newest first
       _transactions.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+      // Cache the fetched data
+      final walletData = <String, dynamic>{
+        'points': _points,
+        'transactions': _transactions
+            .map((t) => {
+                  'id': t.id,
+                  'type': t.type == TransactionType.earn ? 'earn' : 'spend',
+                  'amount': t.amount,
+                  'description': t.description,
+                  'timestamp': t.timestamp.toIso8601String(),
+                })
+            .toList(),
+      };
+      await GardenCacheService.cacheWalletData(userId, walletData);
+      debugPrint(
+          '[WalletController] Synced from Appwrite: $_points points, ${_transactions.length} transactions');
     } catch (e) {
-      debugPrint('Error fetching wallet data: $e');
+      debugPrint(
+          '[WalletController] Appwrite sync failed (using cached data): $e');
     } finally {
       _isLoading = false;
       notifyListeners();

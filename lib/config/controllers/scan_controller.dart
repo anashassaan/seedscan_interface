@@ -1,8 +1,6 @@
 // lib/config/controllers/scan_controller.dart
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
-import 'package:appwrite/appwrite.dart' show Query;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -34,7 +32,9 @@ class ScanController extends ChangeNotifier {
     // Plants list starts empty — populated from DB or QR scan
   }
 
-  /// Load all plants for [userId] from Appwrite (my_garden_qr_codes collection).
+  /// Load all plants for [userId].
+  /// CACHE-FIRST: Shows cached plants instantly, then syncs Appwrite in background.
+  /// Returns immediately — caller is never blocked waiting for Appwrite.
   Future<void> loadMyPlants(String userId) async {
     if (userId.isEmpty) return;
 
@@ -44,9 +44,35 @@ class ScanController extends ChangeNotifier {
     }
 
     _isLoadingPlants = true;
+
+    // STEP 1: INSTANT LOAD FROM CACHE (shown to user immediately)
+    _loadMyPlantsFromCache();
     notifyListeners();
 
+    // STEP 2: BACKGROUND SYNC WITH APPWRITE (truly non-blocking)
+    // ignore: unawaited_futures
+    _syncMyPlantsFromAppwrite(userId);
+  }
+
+  /// Load plants from GardenCacheService (instant, no network required)
+  void _loadMyPlantsFromCache() {
     try {
+      final cachedQRData = GardenCacheService.getAllCachedQRetails();
+      if (cachedQRData != null && cachedQRData.isNotEmpty) {
+        _buildPlantsFromCachedData(cachedQRData);
+        debugPrint(
+            '[ScanController] Loaded ${_myPlants.length} cached plants from Hive');
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[ScanController] Failed to load plants from cache: $e');
+    }
+  }
+
+  /// Background sync: Fetch fresh plants from Appwrite
+  Future<void> _syncMyPlantsFromAppwrite(String userId) async {
+    try {
+      debugPrint('[ScanController] Starting background sync for user $userId');
       final db = DatabaseService();
       final qrList = await db.listMyGardenQRCodes(userId);
 
@@ -65,12 +91,44 @@ class ScanController extends ChangeNotifier {
       );
 
       _buildPlantsFromQR(qrList);
-    } catch (e) {
-      debugPrint('ScanController.loadMyPlants failed: $e');
-    }
 
-    _isLoadingPlants = false;
-    notifyListeners();
+      debugPrint(
+          '[ScanController] Background sync complete — ${_myPlants.length} plants');
+    } catch (e) {
+      debugPrint(
+          '[ScanController] Background sync failed (using cached data): $e');
+    } finally {
+      _isLoadingPlants = false;
+      notifyListeners();
+    }
+  }
+
+  /// Build plants list from cached data
+  void _buildPlantsFromCachedData(List<Map<String, dynamic>> cachedData) {
+    _myPlants.clear();
+    final seenIds = <String>{};
+
+    for (final data in cachedData) {
+      final id = data['docId'] as String?;
+      if (id == null || seenIds.contains(id)) continue;
+      seenIds.add(id);
+
+      final imageUrl = (data['imageUrl'] as String?) ?? '';
+      _myPlants.add(PlantModel(
+        id: id,
+        name: (data['plantName'] as String?) ?? 'Plant',
+        scientificName: (data['localName'] as String?) ??
+            (data['category'] as String?) ??
+            '',
+        image: imageUrl,
+        status: 'Unknown',
+        statusColor: const Color(0xFF9CA3AF),
+        lastScan: '',
+        location: null,
+        latitude: null,
+        longitude: null,
+      ));
+    }
   }
 
   /// Update the in-memory plants list from a pre-fetched QR list.
@@ -86,9 +144,19 @@ class ScanController extends ChangeNotifier {
     final seenIds = <String>{};
 
     for (final qr in qrList) {
-      // Only show QR codes that have been scanned and planted.
-      // A QR with plantedAt == null is one that was generated but not yet scanned.
-      if (qr.plantedAt == null) continue;
+      // Show plants that have been planted (plantedAt set) OR have images/location data indicating use.
+      // Skip ONLY if:
+      // 1. No plantedAt timestamp AND
+      // 2. No image OR no location AND
+      // 3. It's a very new QR (created in last 5 minutes - probably just generated, not used yet)
+      final hasNoPlantingData = qr.plantedAt == null &&
+          (qr.imageUrl == null || qr.imageUrl!.isEmpty) &&
+          (qr.locationLat == 0.0 && qr.locationLong == 0.0);
+      final isVeryNewQR = DateTime.now().difference(qr.createdAt).inMinutes < 5;
+
+      if (hasNoPlantingData && isVeryNewQR) {
+        continue; // Skip only if QR was just created and not used yet
+      }
 
       if (seenIds.contains(qr.id)) continue;
       seenIds.add(qr.id);
@@ -98,6 +166,9 @@ class ScanController extends ChangeNotifier {
           ? qr.imageUrl!
           : (GardenCacheService.getImageUrl(qr.id) ?? '');
 
+      // Use plantedAt if available, otherwise fall back to createdAt
+      final displayDate = qr.plantedAt ?? qr.createdAt;
+
       _myPlants.add(PlantModel(
         id: qr.id,
         name: qr.plantName.isNotEmpty ? qr.plantName : 'Plant',
@@ -105,7 +176,7 @@ class ScanController extends ChangeNotifier {
         image: imageUrl,
         status: _healthStatusLabel(qr.notes),
         statusColor: _healthStatusColor(qr.notes),
-        lastScan: _formatDate(qr.plantedAt),
+        lastScan: _formatDate(displayDate),
         location: qr.gardenId,
         latitude: qr.locationLat != 0.0 ? qr.locationLat : null,
         longitude: qr.locationLong != 0.0 ? qr.locationLong : null,
@@ -115,8 +186,9 @@ class ScanController extends ChangeNotifier {
 
   static String _healthStatusLabel(String notes) {
     final lower = notes.toLowerCase();
-    if (lower.contains('disease') || lower.contains('sick'))
+    if (lower.contains('disease') || lower.contains('sick')) {
       return 'Needs Attention';
+    }
     if (lower.contains('water')) return 'Needs Water';
     return 'Healthy';
   }
@@ -387,7 +459,6 @@ class ScanController extends ChangeNotifier {
     }
   }
 
-
   // Update plant location with new GPS coordinates
   Future<Map<String, dynamic>> updatePlantLocation(String plantId) async {
     try {
@@ -450,6 +521,17 @@ class ScanController extends ChangeNotifier {
         print(
             'Updated plant $plantId location: ${position.latitude}, ${position.longitude}');
         notifyListeners();
+
+        // Update database asynchronously
+        try {
+          await DatabaseService().updatePlant(plantId, {
+            'location_lat': position.latitude,
+            'location_long': position.longitude,
+          });
+          print('Synced updated location to DB for $plantId');
+        } catch (dbErr) {
+          print('Failed to sync location to DB for $plantId: $dbErr');
+        }
       }
 
       return {
@@ -526,6 +608,17 @@ class ScanController extends ChangeNotifier {
         print(
             'Updated plant $plantId location: $locationName (${position.latitude}, ${position.longitude})');
         notifyListeners();
+
+        // Update database asynchronously
+        try {
+          await DatabaseService().updatePlant(plantId, {
+            'location_lat': position.latitude,
+            'location_long': position.longitude,
+          });
+          print('Synced updated location with name to DB for $plantId');
+        } catch (dbErr) {
+          print('Failed to sync location to DB for $plantId: $dbErr');
+        }
       }
 
       return {
@@ -622,6 +715,28 @@ class ScanController extends ChangeNotifier {
     _lastLatitude = null;
     _lastLongitude = null;
     notifyListeners();
+  }
+
+  // Synchronize location locally for a specific plant without doing DB calls or permissions
+  void syncPlantLocationLocal(
+      String plantId, String locationName, double latitude, double longitude) {
+    final plantIndex = _myPlants.indexWhere((p) => p.id == plantId);
+    if (plantIndex != -1) {
+      final p = _myPlants[plantIndex];
+      _myPlants[plantIndex] = PlantModel(
+        id: p.id,
+        name: p.name,
+        scientificName: p.scientificName,
+        image: p.image,
+        status: p.status,
+        statusColor: p.statusColor,
+        lastScan: p.lastScan,
+        location: locationName,
+        latitude: latitude,
+        longitude: longitude,
+      );
+      notifyListeners();
+    }
   }
 
   @override

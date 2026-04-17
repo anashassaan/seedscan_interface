@@ -15,7 +15,7 @@ class AIModelUpdatesView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Active Model: mobilenetv3_apple_disease.tflite',
+            Text('Active Model: mobilenetv3_large_disease_updted.tflite',
                 style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,

@@ -168,10 +168,10 @@ class _LoginViewState extends State<LoginView> {
                                       ? const CircularProgressIndicator()
                                       : CustomButton(
                                           onPressed: _submit,
-                                          child: Row(
+                                          child: const Row(
                                             mainAxisAlignment:
                                                 MainAxisAlignment.center,
-                                            children: const [
+                                            children: [
                                               Icon(Icons.lock_open_rounded),
                                               SizedBox(width: 8),
                                               Text('Sign In'),

@@ -78,7 +78,7 @@ class PlantCard extends StatelessWidget {
                 errorBuilder: (context, _, __) => Container(
                   width: 72,
                   height: 72,
-                  color: cs.surfaceVariant,
+                  color: cs.surfaceContainerHighest,
                   child: Icon(Icons.local_florist,
                       size: 32, color: cs.onSurfaceVariant),
                 ),

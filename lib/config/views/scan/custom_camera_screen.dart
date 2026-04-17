@@ -91,9 +91,9 @@ class _CustomCameraScreenState extends State<CustomCameraScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
 
     if (!isInitialized || _controller == null) {
-      return Scaffold(
+      return const Scaffold(
         backgroundColor: Colors.black,
-        body: const Center(
+        body: Center(
           child: CircularProgressIndicator(color: Colors.white),
         ),
       );

@@ -7,6 +7,7 @@ import 'config/controllers/theme_controller.dart';
 import 'config/controllers/notification_controller.dart';
 import 'services/push_notification_service.dart';
 import 'config/controllers/admin_controller.dart';
+import 'config/controllers/withdrawal_controller.dart';
 import 'config/theme.dart';
 import 'config/controllers/auth_controller.dart';
 import 'config/controllers/scan_controller.dart';
@@ -15,6 +16,7 @@ import 'config/controllers/wallet_controller.dart';
 import 'config/controllers/community_controller.dart';
 import 'services/appwrite_service.dart';
 import 'services/garden_cache_service.dart';
+import 'services/hive_cache_service.dart';
 
 import 'config/views/auth/login_view.dart';
 import 'config/views/main/main_navigation.dart';
@@ -22,6 +24,10 @@ import 'config/views/admin/admin_dashboard_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Google Fonts defaults to true. When offline, it throws a SocketException.
+  // We explicitly catch this in the PlatformDispatcher below so it falls back
+  // to system fonts smoothly without crashing.
 
   // Catch uncaught errors from the root zone (e.g. Appwrite Realtime SDK
   // throwing _TypeError when it receives null-payload WebSocket frames).
@@ -39,12 +45,23 @@ void main() async {
       debugPrint('[RootZone] Suppressed RangeError: $error');
       return true;
     }
+
+    // Suppress Google Fonts (and other non-fatal) offline connection exceptions
+    // This allows the app to fallback to native system fonts gracefully instead of crashing
+    if (error.toString().contains('SocketException') ||
+        error.toString().contains('Failed host lookup')) {
+      debugPrint(
+          '[RootZone] Suppressed SocketException (Offline Mode Fallback allowed): $error');
+      return true;
+    }
+
     return false;
   };
 
   // Initialize Hive (local cache)
   await Hive.initFlutter();
   await GardenCacheService.initialize();
+  await HiveCacheService.initialize();
 
   // Initialize local notifications (permission request + channel setup)
   await PushNotificationService().initLocalNotifications();
@@ -74,6 +91,8 @@ class SeedScanApp extends StatelessWidget {
             create: (_) => NotificationController()),
         ChangeNotifierProvider<WalletController>(
             create: (_) => WalletController()),
+        ChangeNotifierProvider<WithdrawalController>(
+            create: (_) => WithdrawalController()),
         ChangeNotifierProvider<AdminController>(
             create: (_) => AdminController()),
       ],
@@ -117,7 +136,6 @@ class EntryDecider extends StatefulWidget {
 
 class _EntryDeciderState extends State<EntryDecider> {
   bool _initializing = true;
-  bool _loadingUserData = false;
   String? _loadedForUserId;
 
   @override
@@ -128,26 +146,31 @@ class _EntryDeciderState extends State<EntryDecider> {
 
   Future<void> _init() async {
     final auth = Provider.of<AuthController>(context, listen: false);
+    // Restore auth from Hive + SharedPrefs (instant, ~30ms).
+    // This sets isLoggedIn/isAdmin from cache so we can navigate immediately.
     await auth.initialize();
-
-    // Load user-scoped data once logged in
-    if (auth.isLoggedIn && !auth.isAdmin) {
-      final uid = auth.userId ?? '';
-      await _loadUserScopedData(uid);
-    }
 
     if (mounted) {
       setState(() => _initializing = false);
     }
+
+    // Fire data loading in the BACKGROUND — we do NOT await this.
+    // Each controller shows cached data instantly via notifyListeners(),
+    // then quietly syncs with Appwrite and updates again.
+    if (auth.isLoggedIn && !auth.isAdmin) {
+      final uid = auth.userId ?? '';
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _kickoffUserDataLoading(uid);
+      });
+    }
   }
 
-  Future<void> _loadUserScopedData(String userId) async {
-    if (userId.isEmpty || _loadingUserData) return;
+  /// Fires all user-scoped data loaders concurrently in the background.
+  /// None of them block the UI — they each do cache-first + background sync.
+  void _kickoffUserDataLoading(String userId) {
+    if (userId.isEmpty) return;
     if (_loadedForUserId == userId) return;
-
-    if (mounted) {
-      setState(() => _loadingUserData = true);
-    }
+    _loadedForUserId = userId;
 
     final communityCtrl =
         Provider.of<CommunityController>(context, listen: false);
@@ -156,24 +179,25 @@ class _EntryDeciderState extends State<EntryDecider> {
         Provider.of<NotificationController>(context, listen: false);
     final walletCtrl = Provider.of<WalletController>(context, listen: false);
 
-    try {
-      await Future.wait([
-        communityCtrl.loadUserCommunities(userId),
-        scanCtrl.loadMyPlants(userId),
-        notifCtrl.initialize(userId),
-        walletCtrl.fetchWalletData(userId),
-      ]);
-      _loadedForUserId = userId;
-    } finally {
-      if (mounted) {
-        setState(() => _loadingUserData = false);
-      }
-    }
+    // All four are intentionally NOT awaited — they are truly fire-and-forget.
+    // Each controller:
+    //   1. Loads from Hive instantly → calls notifyListeners() → UI updates
+    //   2. Syncs with Appwrite in background → calls notifyListeners() again
+    // ignore: unawaited_futures
+    communityCtrl.loadUserCommunities(userId);
+    // ignore: unawaited_futures
+    scanCtrl.loadMyPlants(userId);
+    // ignore: unawaited_futures
+    notifCtrl.initialize(userId);
+    // ignore: unawaited_futures
+    walletCtrl.fetchWalletData(userId);
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_initializing || _loadingUserData) {
+    // Only show splash spinner during the initial auth restore from cache (~30ms).
+    // Once auth state is known, navigate immediately — no Appwrite wait.
+    if (_initializing) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
@@ -188,21 +212,32 @@ class _EntryDeciderState extends State<EntryDecider> {
 
     // Admin users get the admin dashboard
     if (auth.isAdmin) {
-      return const AdminDashboardView();
+      final adminId = auth.userId ?? '';
+      // SECURITY: Trigger admin controller update if admin user changed
+      // This ensures old admin data isn't shown to new admin users
+      if (adminId.isNotEmpty && _loadedForUserId != adminId) {
+        _loadedForUserId = adminId;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            final adminCtrl =
+                Provider.of<AdminController>(context, listen: false);
+            adminCtrl.reset();
+          }
+        });
+      }
+      // Use adminId as key to force widget recreation when admin changes
+      return AdminDashboardView(adminId: adminId, key: ValueKey(adminId));
     }
 
+    // Regular users get the main app immediately.
+    // If user just logged in (uid changed), kick off background data loading.
     final uid = auth.userId ?? '';
-    if (uid.isNotEmpty && _loadedForUserId != uid && !_loadingUserData) {
+    if (uid.isNotEmpty && _loadedForUserId != uid) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _loadUserScopedData(uid);
+        if (mounted) _kickoffUserDataLoading(uid);
       });
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
     }
 
-    // Regular users get the main app
     return const MainNavigation();
   }
 }

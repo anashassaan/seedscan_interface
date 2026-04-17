@@ -139,7 +139,7 @@ class _CommunityPlantsViewState extends State<CommunityPlantsView> {
                   padding: const EdgeInsets.all(16),
                   color: Theme.of(context)
                       .colorScheme
-                      .surfaceVariant
+                      .surfaceContainerHighest
                       .withOpacity(0.3),
                   child: Row(
                     children: [
@@ -302,14 +302,14 @@ class _CommunityPlantsViewState extends State<CommunityPlantsView> {
               _buildInfoRow(
                 LucideIcons.users,
                 'Members',
-                '${_formatNumber(community.memberCount)}',
+                _formatNumber(community.memberCount),
                 cs,
               ),
               const SizedBox(height: 12),
               _buildInfoRow(
                 LucideIcons.leaf,
                 'Plants',
-                '${_formatNumber(community.plantCount)}',
+                _formatNumber(community.plantCount),
                 cs,
               ),
               const SizedBox(height: 12),
@@ -406,7 +406,7 @@ class _CommunityPlantCard extends StatelessWidget {
                   errorBuilder: (context, error, stackTrace) {
                     return Container(
                       height: 180,
-                      color: cs.surfaceVariant,
+                      color: cs.surfaceContainerHighest,
                       child: Center(
                         child: Icon(
                           LucideIcons.flower2,
@@ -561,7 +561,7 @@ class _CommunityPlantCard extends StatelessWidget {
                             return Container(
                               height: 300,
                               decoration: BoxDecoration(
-                                color: cs.surfaceVariant,
+                                color: cs.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Icon(
@@ -669,7 +669,7 @@ class _CommunityPlantCard extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: cs.surfaceVariant.withOpacity(0.3),
+                        color: cs.surfaceContainerHighest.withOpacity(0.3),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Column(
@@ -859,7 +859,7 @@ class _CommunityPlantCard extends StatelessWidget {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(
           'Update Location',
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
@@ -904,7 +904,7 @@ class _CommunityPlantCard extends StatelessWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: Text(
               'Cancel',
               style: GoogleFonts.inter(),
@@ -926,7 +926,7 @@ class _CommunityPlantCard extends StatelessWidget {
                 return;
               }
 
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
 
               try {
                 // Use ScanController's helper method to get location with GPS
@@ -943,6 +943,18 @@ class _CommunityPlantCard extends StatelessWidget {
                       result['latitude'],
                       result['longitude'],
                     );
+
+                    // Sync in local scan controller (My Garden)
+                    try {
+                      scanController.syncPlantLocationLocal(
+                        plant.id,
+                        locationName,
+                        result['latitude'] ?? 0.0,
+                        result['longitude'] ?? 0.0,
+                      );
+                    } catch (e) {
+                      debugPrint('Sync to ScanController failed: $e');
+                    }
 
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -1002,9 +1014,9 @@ class _CommunityPlantCard extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
+      builder: (sheetContext) => Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
+          color: Theme.of(sheetContext).scaffoldBackgroundColor,
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(20),
             topRight: Radius.circular(20),
@@ -1043,7 +1055,7 @@ class _CommunityPlantCard extends StatelessWidget {
                     style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
                   ),
                   onTap: () async {
-                    Navigator.pop(context);
+                    Navigator.pop(sheetContext);
                     final XFile? image = await picker.pickImage(
                       source: ImageSource.gallery,
                     );
@@ -1068,7 +1080,7 @@ class _CommunityPlantCard extends StatelessWidget {
                     style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
                   ),
                   onTap: () async {
-                    Navigator.pop(context);
+                    Navigator.pop(sheetContext);
                     final XFile? image = await picker.pickImage(
                       source: ImageSource.camera,
                     );
@@ -1120,8 +1132,8 @@ Future<void> _uploadAndLogPlantImage({
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to upload image: $e',
-              style: GoogleFonts.poppins()),
+          content:
+              Text('Failed to upload image: $e', style: GoogleFonts.poppins()),
           backgroundColor: Colors.red,
         ),
       );
@@ -1145,7 +1157,7 @@ Future<void> _uploadAndLogPlantImage({
       final nowIso = DateTime.now().toIso8601String();
 
       final historyMeta = jsonEncode({
-        'type': 'image_update_meta',  // triggers 'image_update' branch in admin
+        'type': 'image_update_meta', // triggers 'image_update' branch in admin
         'updated_at': nowIso,
         'health': plant.status,
         'location': plant.location,
@@ -1157,7 +1169,7 @@ Future<void> _uploadAndLogPlantImage({
 
       await db.createActivityLog(
         userId: userId,
-        plantId: plant.id,          // correct plant doc ID — no fuzzy match
+        plantId: plant.id, // correct plant doc ID — no fuzzy match
         // 'scan_disease' is used because the Appwrite schema enum only accepts
         // ['water', 'scan_disease', 'register']. The admin history panel
         // detects image-update entries via meta['type'] == 'image_update_meta'
@@ -1166,7 +1178,8 @@ Future<void> _uploadAndLogPlantImage({
         actionType: 'scan_disease',
         coinsAwarded: 0,
         verificationStatus: 'verified',
-        proofImageId: imageUrl,     // full URL → admin CachedNetworkImage renders it
+        proofImageId:
+            imageUrl, // full URL → admin CachedNetworkImage renders it
         rejectionReason: historyMeta,
       );
     }
@@ -1183,11 +1196,10 @@ Future<void> _uploadAndLogPlantImage({
   if (context.mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Plant image added to history!',
-            style: GoogleFonts.poppins()),
+        content:
+            Text('Plant image added to history!', style: GoogleFonts.poppins()),
         backgroundColor: Colors.green,
       ),
     );
   }
 }
-

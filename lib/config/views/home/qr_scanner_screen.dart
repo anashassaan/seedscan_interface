@@ -70,7 +70,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: BackButton(color: Colors.white),
+        leading: const BackButton(color: Colors.white),
         title: Text(
           'Scan QR Code',
           style: GoogleFonts.poppins(
@@ -120,7 +120,7 @@ class _QRScannerScreenState extends State<QRScannerScreen>
           ),
 
           // Dark overlay with transparent cutout
-          Positioned.fill(
+          const Positioned.fill(
             child: _OverlayCutout(cornerRadius: 20),
           ),
 
@@ -1479,7 +1479,7 @@ class _CutoutPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..color = Colors.black.withOpacity(0.65);
-    final cutoutSize = 300.0;
+    const cutoutSize = 300.0;
     final left = (size.width - cutoutSize) / 2;
     final top = (size.height - cutoutSize) / 2;
 

@@ -76,11 +76,20 @@ class HomeView extends StatelessWidget {
                       const SizedBox(width: 12),
                       CircleAvatar(
                         radius: 24,
-                        backgroundImage: auth.profileImage != null
-                            ? FileImage(File(auth.profileImage!))
-                            : const NetworkImage(
-                                'https://randomuser.me/api/portraits/men/45.jpg',
-                              ) as ImageProvider,
+                        backgroundColor: cs.primaryContainer,
+                        backgroundImage: auth.profileImageUrl != null
+                            ? NetworkImage(auth.profileImageUrl!)
+                            : null,
+                        child: auth.profileImageUrl == null
+                            ? Text(
+                                auth.userInitials,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
+                                  color: cs.onPrimaryContainer,
+                                ),
+                              )
+                            : null,
                       ),
                     ],
                   ),

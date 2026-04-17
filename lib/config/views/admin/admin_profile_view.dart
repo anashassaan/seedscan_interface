@@ -63,7 +63,7 @@ class _AdminProfileViewState extends State<AdminProfileView>
     );
     if (image != null && mounted) {
       final auth = Provider.of<AuthController>(context, listen: false);
-      auth.updateProfile(name: _nameCtrl.text, imagePath: image.path);
+      auth.uploadAvatar(image.path);
     }
   }
 
@@ -182,7 +182,7 @@ class _AdminProfileViewState extends State<AdminProfileView>
     setState(() {
       if (_isEditing) {
         final auth = Provider.of<AuthController>(context, listen: false);
-        auth.updateProfile(name: _nameCtrl.text);
+        auth.updateProfileName(_nameCtrl.text);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('Profile updated successfully'),
@@ -348,10 +348,10 @@ class _AdminProfileViewState extends State<AdminProfileView>
               width: double.infinity,
               padding: EdgeInsets.fromLTRB(24, topPad + 16, 24, 28),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
+                gradient: const LinearGradient(
                   colors: [
-                    const Color(0xFF0BA360),
-                    const Color(0xFF3CBA92),
+                    Color(0xFF0BA360),
+                    Color(0xFF3CBA92),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -389,12 +389,20 @@ class _AdminProfileViewState extends State<AdminProfileView>
                         child: CircleAvatar(
                           radius: 48,
                           backgroundColor: Colors.white.withOpacity(0.2),
-                          backgroundImage: auth.profileImage != null
-                              ? FileImage(File(auth.profileImage!))
+                          backgroundImage: auth.profileImageUrl != null
+                              ? NetworkImage(auth.profileImageUrl!)
                               : null,
-                          child: auth.profileImage == null
-                              ? const Icon(LucideIcons.user,
-                                  color: Colors.white, size: 36)
+                          child: auth.isUploadingAvatar
+                            ? const CircularProgressIndicator(color: Colors.white)
+                            : auth.profileImageUrl == null
+                              ? Text(
+                                  auth.userInitials,
+                                  style: const TextStyle(
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                )
                               : null,
                         ),
                       ),
@@ -516,13 +524,13 @@ class _AdminProfileViewState extends State<AdminProfileView>
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(color: Colors.white.withOpacity(0.3)),
                     ),
-                    child: Row(
+                    child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(LucideIcons.shield,
+                        Icon(LucideIcons.shield,
                             size: 14, color: Colors.white),
-                        const SizedBox(width: 6),
-                        const Text('System Administrator',
+                        SizedBox(width: 6),
+                        Text('System Administrator',
                             style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,

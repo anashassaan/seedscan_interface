@@ -151,7 +151,7 @@ class _PlantDetailAdminViewState extends State<PlantDetailAdminView> {
                             Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                color: cs.surfaceVariant.withOpacity(0.3),
+                                color: cs.surfaceContainerHighest.withOpacity(0.3),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(color: cs.outlineVariant),
                               ),
@@ -383,7 +383,7 @@ class _PlantDetailAdminViewState extends State<PlantDetailAdminView> {
                                               placeholder: (ctx, url) =>
                                                   Container(
                                                 height: 200,
-                                                color: cs.surfaceVariant,
+                                                color: cs.surfaceContainerHighest,
                                                 child: const Center(
                                                   child:
                                                       CircularProgressIndicator(
@@ -393,7 +393,7 @@ class _PlantDetailAdminViewState extends State<PlantDetailAdminView> {
                                               errorWidget: (ctx, url, err) =>
                                                   Container(
                                                 height: 120,
-                                                color: cs.surfaceVariant,
+                                                color: cs.surfaceContainerHighest,
                                                 child: Center(
                                                   child: Icon(
                                                       LucideIcons.imageOff,

@@ -21,7 +21,8 @@ class CommunityController extends ChangeNotifier {
   bool _isLoadingCommunityPlants = false;
   bool get isLoadingCommunityPlants => _isLoadingCommunityPlants;
 
-  /// Load all communities that the given [userId] is a member of from Appwrite.
+  /// Load all communities that the given [userId] is a member of.
+  /// CACHE-FIRST: Loads from GardenCacheService instantly, then syncs from Appwrite in background.
   Future<void> loadUserCommunities(String userId) async {
     if (userId.isEmpty) return;
 
@@ -34,10 +35,54 @@ class CommunityController extends ChangeNotifier {
       _loadedForUserId = userId;
     }
 
+    // STEP 1: INSTANT LOAD FROM CACHE
+    _loadCommunitiesFromCache(userId);
     _isLoading = true;
     notifyListeners();
 
+    // STEP 2: BACKGROUND SYNC WITH APPWRITE (silent refresh)
+    _syncCommunitiesFromAppwrite(userId);
+  }
+
+  /// Load communities from GardenCacheService (instant, no network required)
+  void _loadCommunitiesFromCache(String userId) {
     try {
+      final cachedCommunities = GardenCacheService.getCachedCommunities(userId);
+      if (cachedCommunities != null && cachedCommunities.isNotEmpty) {
+        _communities.clear();
+        _communities.addAll(cachedCommunities);
+
+        // Load cached plants for EACH community
+        _communityPlants.clear();
+        for (final community in cachedCommunities) {
+          final cachedPlants =
+              GardenCacheService.getCommunityPlantsCache(community.id);
+          if (cachedPlants != null && cachedPlants.isNotEmpty) {
+            _communityPlants[community.id] =
+                cachedPlants.map((m) => CommunityPlant.fromMap(m)).toList();
+            debugPrint(
+                '[CommunityController] Loaded ${cachedPlants.length} cached plants for community ${community.name}');
+          } else {
+            _communityPlants[community.id] = [];
+            debugPrint(
+                '[CommunityController] No cached plants yet for community ${community.name}');
+          }
+        }
+        debugPrint(
+            '[CommunityController] Loaded ${_communities.length} communities and ${_communityPlants.length} plant caches from Hive');
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[CommunityController] Failed to load from cache: $e');
+    }
+  }
+
+  /// Background sync: Fetch fresh communities from Appwrite
+  Future<void> _syncCommunitiesFromAppwrite(String userId) async {
+    try {
+      debugPrint(
+          '[CommunityController] Starting background Appwrite sync for user \$userId');
+
       // 1. Get membership records for this user
       final memberships = await _db.listUserMemberships(userId);
 
@@ -50,28 +95,49 @@ class CommunityController extends ChangeNotifier {
         }
       }
 
+      // 3. Update in-memory state with fresh data
       _communities
         ..clear()
         ..addAll(loaded);
 
-      // Restore cached plants for each community that has no in-memory data
+      // 4. Cache the fresh communities
+      GardenCacheService.cacheCommunities(userId, loaded);
+
+      // 5. Fetch and cache plants for each community
       for (final community in loaded) {
-        if (!_communityPlants.containsKey(community.id) ||
-            _communityPlants[community.id]!.isEmpty) {
+        try {
+          // Try to fetch fresh plants for this community
+          final plants = await _db.getCommunityMemberPlants(
+            community.id,
+            userId: _currentUserId,
+          );
+          _communityPlants[community.id] = plants;
+          _savePlantsToCache(community.id);
+          debugPrint(
+              '[CommunityController] Cached ${plants.length} plants for community ${community.name}');
+        } catch (e) {
+          // If fetch fails, try to restore from cache
+          debugPrint(
+              '[CommunityController] Failed to fetch plants for community ${community.id}: $e');
           final cached =
               GardenCacheService.getCommunityPlantsCache(community.id);
           if (cached != null && cached.isNotEmpty) {
             _communityPlants[community.id] =
                 cached.map((m) => CommunityPlant.fromMap(m)).toList();
+            debugPrint(
+                '[CommunityController] Restored ${cached.length} cached plants for community ${community.id}');
           }
         }
       }
+      debugPrint(
+          '[CommunityController] Background sync complete — \${_communities.length} communities with \${_communityPlants.length} plant caches');
     } catch (e) {
-      debugPrint('CommunityController.loadUserCommunities failed: $e');
+      debugPrint(
+          '[CommunityController] Background Appwrite sync failed (using cached data): \$e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
-
-    _isLoading = false;
-    notifyListeners();
   }
 
   /// Communities created by [userId].
@@ -124,13 +190,44 @@ class CommunityController extends ChangeNotifier {
     return List.unmodifiable(_communityPlants[communityId] ?? []);
   }
 
-  /// Load/refresh all member plants for [communityId] from Appwrite.
+  /// Load/refresh all member plants for [communityId].
+  /// CACHE-FIRST: Loads from GardenCacheService instantly, then syncs from Appwrite in background.
   /// Only fetches plants belonging to the currently logged-in user.
   Future<void> loadCommunityPlantsFromServer(String communityId) async {
     if (_isLoadingCommunityPlants) return;
     _isLoadingCommunityPlants = true;
+
+    // STEP 1: INSTANT LOAD FROM CACHE
+    _loadCommunityPlantsFromCache(communityId);
     notifyListeners();
+
+    // STEP 2: BACKGROUND SYNC WITH APPWRITE (silent refresh)
+    await _syncCommunityPlantsFromAppwrite(communityId);
+  }
+
+  /// Load plants from GardenCacheService (instant, no network required)
+  void _loadCommunityPlantsFromCache(String communityId) {
     try {
+      final cached = GardenCacheService.getCommunityPlantsCache(communityId);
+      if (cached != null && cached.isNotEmpty) {
+        _communityPlants[communityId] =
+            cached.map((m) => CommunityPlant.fromMap(m)).toList();
+        debugPrint(
+            '[CommunityController] Loaded ${_communityPlants[communityId]?.length ?? 0} cached plants for community $communityId');
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint(
+          '[CommunityController] Failed to load community plants from cache: $e');
+    }
+  }
+
+  /// Background sync: Fetch fresh community plants from Appwrite
+  Future<void> _syncCommunityPlantsFromAppwrite(String communityId) async {
+    try {
+      debugPrint(
+          '[CommunityController] Starting background sync for community $communityId');
+
       // Bug-3 fix: pass _currentUserId so only the logged-in user's plants
       // are returned, not every member's plants.
       final plants = await _db.getCommunityMemberPlants(
@@ -138,10 +235,12 @@ class CommunityController extends ChangeNotifier {
         userId: _currentUserId,
       );
       _communityPlants[communityId] = plants;
-      notifyListeners();
       _savePlantsToCache(communityId);
+      debugPrint(
+          '[CommunityController] Background sync complete for community $communityId — ${plants.length} plants');
     } catch (e) {
-      debugPrint('CommunityController.loadCommunityPlantsFromServer: $e');
+      debugPrint(
+          '[CommunityController] Background sync failed for community $communityId (using cached data): $e');
     } finally {
       _isLoadingCommunityPlants = false;
       notifyListeners();
@@ -257,8 +356,8 @@ class CommunityController extends ChangeNotifier {
   }
 
   // Update plant location
-  void updatePlantLocation(String communityId, String plantId, String location,
-      double? latitude, double? longitude) {
+  Future<void> updatePlantLocation(String communityId, String plantId,
+      String location, double? latitude, double? longitude) async {
     if (_communityPlants.containsKey(communityId)) {
       final plants = _communityPlants[communityId]!;
       final plantIndex = plants.indexWhere((p) => p.id == plantId);
@@ -273,6 +372,18 @@ class CommunityController extends ChangeNotifier {
         _communityPlants[communityId]![plantIndex] = updatedPlant;
         notifyListeners();
         _savePlantsToCache(communityId);
+
+        // Synchronize with database
+        try {
+          await _db.updatePlant(plantId, {
+            if (latitude != null) 'location_lat': latitude,
+            if (longitude != null) 'location_long': longitude,
+          });
+          debugPrint(
+              'Successfully synced updated location for $plantId to database.');
+        } catch (e) {
+          debugPrint('Failed to sync location for $plantId to database: $e');
+        }
       }
     }
   }
@@ -284,5 +395,59 @@ class CommunityController extends ChangeNotifier {
       total += plants.length;
     }
     return total;
+  }
+
+  // Synchronize location locally generated by another screen
+  void syncPlantLocationLocal(
+      String plantId, String locationName, double latitude, double longitude) {
+    bool updated = false;
+    for (final communityId in _communityPlants.keys) {
+      final plants = _communityPlants[communityId]!;
+      final idx = plants.indexWhere((p) => p.id == plantId);
+      if (idx != -1) {
+        _communityPlants[communityId]![idx] = plants[idx].copyWith(
+          location: locationName,
+          latitude: latitude,
+          longitude: longitude,
+        );
+        _savePlantsToCache(communityId);
+        updated = true;
+      }
+    }
+    if (updated) {
+      notifyListeners();
+    }
+  }
+
+  /// Preemptively cache all community plants in background
+  /// Call this on app startup to populate Hive with all plants before going offline
+  void preemptiveCacheAllCommunityPlants() {
+    debugPrint(
+        '[CommunityController] Starting preemptive cache of all community plants for ${_communities.length} communities');
+
+    for (final community in _communities) {
+      // Fire and forget - cache each community's plants in background
+      _preemptiveCacheCommunitySilently(community.id);
+    }
+  }
+
+  /// Cache plants for a single community without blocking (fire and forget)
+  void _preemptiveCacheCommunitySilently(String communityId) {
+    // Run in background without blocking UI
+    Future.microtask(() async {
+      try {
+        final plants = await _db.getCommunityMemberPlants(
+          communityId,
+          userId: _currentUserId,
+        );
+        _communityPlants[communityId] = plants;
+        _savePlantsToCache(communityId);
+        debugPrint(
+            '[CommunityController] Preemptively cached ${plants.length} plants for community $communityId');
+      } catch (e) {
+        debugPrint(
+            '[CommunityController] Failed to preemptively cache community $communityId: $e');
+      }
+    });
   }
 }

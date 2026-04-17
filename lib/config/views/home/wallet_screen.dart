@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/wallet_controller.dart';
+import '../../controllers/withdrawal_controller.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -157,9 +158,9 @@ class _WalletScreenState extends State<WalletScreen>
           ),
 
           // Quick Stats
-          SliverToBoxAdapter(
+          const SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -174,7 +175,7 @@ class _WalletScreenState extends State<WalletScreen>
                           subtitle: 'This month',
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: 12),
                       Expanded(
                         child: _QuickStatCard(
                           icon: LucideIcons.trendingDown,
@@ -186,7 +187,7 @@ class _WalletScreenState extends State<WalletScreen>
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  SizedBox(height: 12),
                   Row(
                     children: [
                       Expanded(
@@ -198,7 +199,7 @@ class _WalletScreenState extends State<WalletScreen>
                           subtitle: '850+ points',
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizedBox(width: 12),
                       Expanded(
                         child: _QuickStatCard(
                           icon: LucideIcons.zap,
@@ -298,19 +299,19 @@ class _WalletScreenState extends State<WalletScreen>
               style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            _InfoItem('Daily login: +10 points'),
-            _InfoItem('Scanning plants: +20 points'),
-            _InfoItem('Adding to garden: +15 points'),
-            _InfoItem('Completing tasks: +50 points'),
+            const _InfoItem('Daily login: +10 points'),
+            const _InfoItem('Scanning plants: +20 points'),
+            const _InfoItem('Adding to garden: +15 points'),
+            const _InfoItem('Completing tasks: +50 points'),
             const SizedBox(height: 16),
             Text(
               'Spend points on:',
               style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            _InfoItem('Premium diagnoses'),
-            _InfoItem('Expert consultations'),
-            _InfoItem('Exclusive content'),
+            const _InfoItem('Premium diagnoses'),
+            const _InfoItem('Expert consultations'),
+            const _InfoItem('Exclusive content'),
           ],
         ),
         actions: [
@@ -365,35 +366,35 @@ class _WalletScreenState extends State<WalletScreen>
                   ),
                 ),
                 const SizedBox(height: 20),
-                _EarnPointsCard(
+                const _EarnPointsCard(
                   icon: LucideIcons.calendar,
                   title: 'Daily Login',
                   points: '+10',
                   description: 'Login every day to earn points',
                   progress: 0.7,
                 ),
-                _EarnPointsCard(
+                const _EarnPointsCard(
                   icon: LucideIcons.scanLine,
                   title: 'Scan Plants',
                   points: '+20',
                   description: 'Scan and identify plants',
                   progress: 0.4,
                 ),
-                _EarnPointsCard(
+                const _EarnPointsCard(
                   icon: LucideIcons.leaf,
                   title: 'Add to Garden',
                   points: '+15',
                   description: 'Add plants to your garden',
                   progress: 0.6,
                 ),
-                _EarnPointsCard(
+                const _EarnPointsCard(
                   icon: LucideIcons.checkCircle,
                   title: 'Complete Tasks',
                   points: '+50',
                   description: 'Finish daily and weekly tasks',
                   progress: 0.2,
                 ),
-                _EarnPointsCard(
+                const _EarnPointsCard(
                   icon: LucideIcons.share2,
                   title: 'Refer Friends',
                   points: '+100',
@@ -669,7 +670,7 @@ class _RewardsTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        _RewardCard(
+        const _RewardCard(
           icon: LucideIcons.trophy,
           title: 'Bronze Tier',
           description: 'Unlock basic features',
@@ -677,7 +678,7 @@ class _RewardsTab extends StatelessWidget {
           isUnlocked: true,
           color: Colors.brown,
         ),
-        _RewardCard(
+        const _RewardCard(
           icon: LucideIcons.award,
           title: 'Silver Tier',
           description: 'Unlock premium features',
@@ -685,7 +686,7 @@ class _RewardsTab extends StatelessWidget {
           isUnlocked: true,
           color: Colors.grey,
         ),
-        _RewardCard(
+        const _RewardCard(
           icon: LucideIcons.crown,
           title: 'Gold Tier',
           description: 'Unlock all features',
@@ -693,7 +694,7 @@ class _RewardsTab extends StatelessWidget {
           isUnlocked: true,
           color: Colors.amber,
         ),
-        _RewardCard(
+        const _RewardCard(
           icon: LucideIcons.gem,
           title: 'Platinum Tier',
           description: 'Exclusive member benefits',
@@ -753,7 +754,7 @@ class _RewardCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: isUnlocked ? color.withOpacity(0.2) : cs.surfaceVariant,
+                color: isUnlocked ? color.withOpacity(0.2) : cs.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Icon(
@@ -778,7 +779,7 @@ class _RewardCard extends StatelessWidget {
                       ),
                       if (isUnlocked) ...[
                         const SizedBox(width: 8),
-                        Icon(
+                        const Icon(
                           LucideIcons.checkCircle,
                           color: Colors.green,
                           size: 18,
@@ -830,35 +831,35 @@ class _RedeemTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        _RedeemCard(
+        const _RedeemCard(
           icon: LucideIcons.microscope,
           title: 'Premium Diagnosis',
           description: 'AI-powered disease detection',
           points: 30,
           color: Colors.blue,
         ),
-        _RedeemCard(
+        const _RedeemCard(
           icon: LucideIcons.userCircle,
           title: 'Expert Consultation',
           description: '30-minute expert session',
           points: 100,
           color: Colors.purple,
         ),
-        _RedeemCard(
+        const _RedeemCard(
           icon: LucideIcons.bookOpen,
           title: 'Care Guide',
           description: 'Detailed plant care instructions',
           points: 50,
           color: Colors.green,
         ),
-        _RedeemCard(
+        const _RedeemCard(
           icon: LucideIcons.gift,
           title: 'Premium Membership',
           description: '1 month of premium features',
           points: 500,
           color: Colors.orange,
         ),
-        _RedeemCard(
+        const _RedeemCard(
           icon: LucideIcons.shoppingBag,
           title: 'Plant Voucher',
           description: '\$20 off at partner nurseries',
@@ -1175,12 +1176,13 @@ class _WithdrawTab extends StatelessWidget {
 
         // JazzCash
         _WithdrawMethodCard(
+          paymentMethod: 'jazzcash',
           logo:
               'https://seeklogo.com/images/J/jazzcash-logo-7ADCB01017-seeklogo.com.png',
           name: 'JazzCash',
           description: 'Instant withdrawal to your JazzCash account',
-          minPoints: 500,
-          conversionRate: '1 point = PKR 1',
+          minCoins: 5000,
+          conversionRate: '10 coins = PKR 1',
           processingTime: 'Instant',
           backgroundColor: Colors.red.shade50,
           accentColor: Colors.red.shade700,
@@ -1188,12 +1190,13 @@ class _WithdrawTab extends StatelessWidget {
 
         // EasyPaisa
         _WithdrawMethodCard(
+          paymentMethod: 'easypaisa',
           logo:
               'https://seeklogo.com/images/E/easypaisa-logo-248661A05E-seeklogo.com.png',
           name: 'EasyPaisa',
           description: 'Instant withdrawal to your Easypaisa account',
-          minPoints: 500,
-          conversionRate: '1 point = PKR 1',
+          minCoins: 5000,
+          conversionRate: '10 coins = PKR 1',
           processingTime: 'Instant',
           backgroundColor: Colors.green.shade50,
           accentColor: Colors.green.shade700,
@@ -1233,11 +1236,11 @@ class _WithdrawTab extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              _WithdrawInfoItem('Minimum withdrawal: 500 points (PKR 500)'),
-              _WithdrawInfoItem('Maximum withdrawal: 10,000 points/day'),
-              _WithdrawInfoItem('Processing fee: Free for first withdrawal'),
-              _WithdrawInfoItem('Subsequent withdrawals: 2% fee'),
-              _WithdrawInfoItem('Processing time: Instant to 5 minutes'),
+              const _WithdrawInfoItem('Minimum withdrawal: 5,000 coins (PKR 500)'),
+              const _WithdrawInfoItem('Conversion rate: 10 coins = 1 PKR'),
+              const _WithdrawInfoItem('Processing fee: Free for first withdrawal'),
+              const _WithdrawInfoItem('Subsequent withdrawals: 2% fee'),
+              const _WithdrawInfoItem('Processing time: Instant to 5 minutes'),
             ],
           ),
         ),
@@ -1248,20 +1251,22 @@ class _WithdrawTab extends StatelessWidget {
 
 // Withdraw Method Card
 class _WithdrawMethodCard extends StatelessWidget {
+  final String paymentMethod;
   final String logo;
   final String name;
   final String description;
-  final int minPoints;
+  final int minCoins;
   final String conversionRate;
   final String processingTime;
   final Color backgroundColor;
   final Color accentColor;
 
   const _WithdrawMethodCard({
+    required this.paymentMethod,
     required this.logo,
     required this.name,
     required this.description,
-    required this.minPoints,
+    required this.minCoins,
     required this.conversionRate,
     required this.processingTime,
     required this.backgroundColor,
@@ -1365,7 +1370,7 @@ class _WithdrawMethodCard extends StatelessWidget {
                     child: _WithdrawDetailItem(
                       icon: LucideIcons.coins,
                       label: 'Min. Amount',
-                      value: '$minPoints pts',
+                      value: '$minCoins coins',
                       color: accentColor,
                     ),
                   ),
@@ -1397,6 +1402,7 @@ class _WithdrawMethodCard extends StatelessWidget {
   void _showWithdrawDialog(BuildContext context) {
     final amountController = TextEditingController();
     final accountController = TextEditingController();
+    final accountTitleController = TextEditingController();
 
     showDialog(
       context: context,
@@ -1434,6 +1440,32 @@ class _WithdrawMethodCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Account Title Field
+              Text(
+                'Account Title',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: accountTitleController,
+                keyboardType: TextInputType.text,
+                decoration: InputDecoration(
+                  hintText: 'Your name as it appears in the app',
+                  prefixIcon: Icon(LucideIcons.user, color: accentColor),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: accentColor, width: 2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
               // Account Number Field
               Text(
                 '$name Account Number',
@@ -1462,7 +1494,7 @@ class _WithdrawMethodCard extends StatelessWidget {
 
               // Amount Field
               Text(
-                'Withdrawal Amount (Points)',
+                'Withdrawal Amount (Coins)',
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w600,
                   fontSize: 14,
@@ -1472,10 +1504,14 @@ class _WithdrawMethodCard extends StatelessWidget {
               TextField(
                 controller: amountController,
                 keyboardType: TextInputType.number,
+                onChanged: (_) {
+                  // Update PKR display when coins change
+                  (context as Element).markNeedsBuild();
+                },
                 decoration: InputDecoration(
-                  hintText: 'Min. $minPoints points',
+                  hintText: 'Min. $minCoins coins',
                   prefixIcon: Icon(LucideIcons.coins, color: accentColor),
-                  suffixText: 'pts',
+                  suffixText: 'coins',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -1488,84 +1524,92 @@ class _WithdrawMethodCard extends StatelessWidget {
               const SizedBox(height: 16),
 
               // Conversion Info
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: backgroundColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: accentColor.withOpacity(0.3),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            'Conversion Rate:',
-                            style: GoogleFonts.poppins(fontSize: 13),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          conversionRate,
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: accentColor,
-                          ),
-                        ),
-                      ],
+              Consumer<WithdrawalController>(
+                builder: (context, withdrawalController, _) {
+                  final inputCoins = int.tryParse(amountController.text) ?? 0;
+                  final pkrAmount =
+                      withdrawalController.coinsToRupees(inputCoins);
+
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: backgroundColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: accentColor.withOpacity(0.3),
+                      ),
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Column(
                       children: [
-                        Flexible(
-                          child: Text(
-                            'Processing Fee:',
-                            style: GoogleFonts.poppins(fontSize: 13),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            'Free (First)',
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.green,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                'Amount in PKR:',
+                                style: GoogleFonts.poppins(fontSize: 13),
+                              ),
                             ),
-                            textAlign: TextAlign.end,
-                          ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'PKR ${pkrAmount.toStringAsFixed(2)}',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: accentColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                'Conversion Rate:',
+                                style: GoogleFonts.poppins(fontSize: 13),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              conversionRate,
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: accentColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                'Processing Fee:',
+                                style: GoogleFonts.poppins(fontSize: 13),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                'Free (First)',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.green,
+                                ),
+                                textAlign: TextAlign.end,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            'Processing Time:',
-                            style: GoogleFonts.poppins(fontSize: 13),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          processingTime,
-                          style: GoogleFonts.poppins(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: accentColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
               const SizedBox(height: 12),
 
@@ -1595,7 +1639,7 @@ class _WithdrawMethodCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          '${walletController.points} pts',
+                          '${walletController.points} coins',
                           style: GoogleFonts.poppins(
                             fontWeight: FontWeight.w700,
                             color: Colors.green.shade900,
@@ -1615,134 +1659,192 @@ class _WithdrawMethodCard extends StatelessWidget {
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () {
-              final walletController =
-                  Provider.of<WalletController>(context, listen: false);
+          Consumer<WithdrawalController>(
+            builder: (context, withdrawalController, _) {
+              return ElevatedButton(
+                onPressed: withdrawalController.isLoading
+                    ? null
+                    : () async {
+                        final walletController = Provider.of<WalletController>(
+                            context,
+                            listen: false);
 
-              if (accountController.text.isEmpty ||
-                  amountController.text.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Please fill all fields',
-                      style: GoogleFonts.poppins(),
-                    ),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-
-              final amount = int.tryParse(amountController.text) ?? 0;
-              if (amount < minPoints) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Minimum withdrawal is $minPoints points',
-                      style: GoogleFonts.poppins(),
-                    ),
-                    backgroundColor: Colors.orange,
-                  ),
-                );
-                return;
-              }
-
-              // Check if user has sufficient balance
-              if (walletController.points < amount) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Insufficient balance. You need ${amount - walletController.points} more points.',
-                      style: GoogleFonts.poppins(),
-                    ),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-                return;
-              }
-
-              // Deduct points from wallet
-              walletController.spendPoints(
-                amount,
-                'Withdrawn to $name (${accountController.text})',
-              );
-
-              Navigator.pop(context);
-
-              // Show success dialog
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: Row(
-                    children: [
-                      Icon(LucideIcons.checkCircle,
-                          color: Colors.green, size: 28),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Success!',
-                        style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
-                      ),
-                    ],
-                  ),
-                  content: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Your withdrawal request has been processed successfully!',
-                        style: GoogleFonts.poppins(fontSize: 14),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              'PKR $amount',
-                              style: GoogleFonts.poppins(
-                                fontSize: 32,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.green.shade700,
+                        if (accountController.text.isEmpty ||
+                            amountController.text.isEmpty ||
+                            accountTitleController.text.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Please fill all fields',
+                                style: GoogleFonts.poppins(),
                               ),
+                              backgroundColor: Colors.red,
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'will be transferred to',
-                              style: GoogleFonts.poppins(fontSize: 12),
-                            ),
-                            Text(
-                              accountController.text,
-                              style: GoogleFonts.poppins(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
+                          );
+                          return;
+                        }
+
+                        final coins = int.tryParse(amountController.text) ?? 0;
+                        if (coins < minCoins) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Minimum withdrawal is $minCoins coins',
+                                style: GoogleFonts.poppins(),
                               ),
+                              backgroundColor: Colors.orange,
                             ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  actions: [
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                      ),
-                      child: const Text('Done'),
-                    ),
-                  ],
+                          );
+                          return;
+                        }
+
+                        // Check if user has sufficient balance
+                        if (walletController.points < coins) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Insufficient balance. You need ${coins - walletController.points} more coins.',
+                                style: GoogleFonts.poppins(),
+                              ),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+
+                        // Call the withdrawal service
+                        final success =
+                            await withdrawalController.requestWithdrawal(
+                          coins,
+                          paymentMethod,
+                          accountTitleController.text,
+                          accountController.text,
+                        );
+
+                        if (success) {
+                          Navigator.pop(context);
+
+                          final pkrAmount =
+                              withdrawalController.coinsToRupees(coins);
+
+                          // Show success dialog
+                          showDialog(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: Row(
+                                children: [
+                                  const Icon(LucideIcons.checkCircle,
+                                      color: Colors.green, size: 28),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Request Submitted!',
+                                    style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.w700),
+                                  ),
+                                ],
+                              ),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'Your withdrawal request has been submitted for approval.',
+                                    style: GoogleFonts.poppins(fontSize: 14),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.shade50,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Text(
+                                          'PKR ${pkrAmount.toStringAsFixed(2)}',
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 32,
+                                            fontWeight: FontWeight.w800,
+                                            color: Colors.green.shade700,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          'Awaiting Admin Approval',
+                                          style:
+                                              GoogleFonts.poppins(fontSize: 12),
+                                        ),
+                                        Text(
+                                          accountController.text,
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.shade50,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                          color: Colors.blue.shade200),
+                                    ),
+                                    child: Text(
+                                      'Status: Pending Admin Approval',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12,
+                                        color: Colors.blue.shade700,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              actions: [
+                                ElevatedButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                  ),
+                                  child: const Text('Done'),
+                                ),
+                              ],
+                            ),
+                          );
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                withdrawalController.errorMessage ??
+                                    'Withdrawal failed',
+                                style: GoogleFonts.poppins(),
+                              ),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accentColor,
                 ),
+                child: withdrawalController.isLoading
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Text('Submit Request'),
               );
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: accentColor,
-            ),
-            child: const Text('Withdraw'),
           ),
         ],
       ),
@@ -1882,7 +1984,7 @@ class _InfoItem extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(
+          const Icon(
             LucideIcons.checkCircle,
             size: 16,
             color: Colors.green,
@@ -1981,7 +2083,7 @@ class _EarnPointsCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
                       value: progress,
-                      backgroundColor: cs.surfaceVariant,
+                      backgroundColor: cs.surfaceContainerHighest,
                       valueColor: AlwaysStoppedAnimation<Color>(
                         Colors.amber.shade700,
                       ),

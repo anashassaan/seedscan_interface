@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../../services/admin_database_service.dart';
+import '../../services/hive_cache_service.dart';
 import '../../models/user_model.dart';
 import 'package:appwrite/appwrite.dart';
 import '../../services/database_service.dart';
@@ -384,11 +385,17 @@ class AdminController extends ChangeNotifier {
   List<String> get existingDiseaseTypes {
     final types = <String>[];
     if ((_healthOwners['diseased']?.isNotEmpty ?? false) ||
-        (_plantHealth['diseased'] ?? 0) > 0) types.add('Diseased');
+        (_plantHealth['diseased'] ?? 0) > 0) {
+      types.add('Diseased');
+    }
     if ((_healthOwners['critical']?.isNotEmpty ?? false) ||
-        (_plantHealth['critical'] ?? 0) > 0) types.add('Critical Condition');
+        (_plantHealth['critical'] ?? 0) > 0) {
+      types.add('Critical Condition');
+    }
     if ((_healthOwners['dead']?.isNotEmpty ?? false) ||
-        (_plantHealth['dead'] ?? 0) > 0) types.add('Dead / Deceased');
+        (_plantHealth['dead'] ?? 0) > 0) {
+      types.add('Dead / Deceased');
+    }
     return types;
   }
 
@@ -410,27 +417,181 @@ class AdminController extends ChangeNotifier {
 
   // ── Initialization ─────────────────────────────────────────────────────────
 
-  /// Load all admin data from Appwrite. Call once on admin login.
+  /// Load all admin data. CACHE-FIRST: restores communities+QR from Hive instantly,
+  /// then syncs with Appwrite in background.
   Future<void> initialize() async {
     if (_isInitialized) return;
+
+    // ── STEP 1: INSTANT RESTORE FROM HIVE ───────────────────────────────────
+    // Only use cache if it's fresh and consistent — this prevents showing stale admin data
+    // from a previous admin account when a new admin logs in.
+    _restoreFromAdminCache();
+
+    // ── STEP 2: BACKGROUND SYNC WITH APPWRITE ───────────────────────────────
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
       await _loadFromAppwrite();
-      _serverStatus = "Online";
+      _serverStatus = 'Online';
       _useLocalFallback = false;
+
+      // Persist full state back to Hive so next launch is also instant.
+      await _persistFullAdminCache();
     } catch (e) {
-      debugPrint('AdminController: Appwrite load failed: $e');
-      _serverStatus = "Offline";
+      debugPrint('[AdminController] Appwrite load failed: $e');
+      _serverStatus = 'Offline';
       _useLocalFallback = true;
-      _errorMessage = 'Failed to connect to server. Please try again.';
+      _errorMessage = 'Failed to connect to server. Showing cached data.';
     }
 
     _isInitialized = true;
     _isLoading = false;
     notifyListeners();
+  }
+
+  /// Reset admin controller state — called when switching between admin users.
+  void reset() {
+    _isInitialized = false;
+    _communities.clear();
+    _plantHealth.clear();
+    _speciesOwners.clear();
+    _healthOwners.clear();
+    _errorMessage = null;
+    _serverStatus = 'Online';
+    _useLocalFallback = false;
+    _isLoading = false;
+    debugPrint('[AdminController] State reset for new admin session');
+    notifyListeners();
+  }
+
+  /// Restore communities, QR codes, and plant health from Hive instantly.
+  /// Called synchronously at the start of initialize() — no network needed.
+  void _restoreFromAdminCache() {
+    try {
+      // ── Restore plant health stats ──
+      final cachedStats = HiveCacheService.getAdminStats();
+      if (cachedStats != null && cachedStats['plantHealth'] != null) {
+        _plantHealth = Map<String, int>.from(cachedStats['plantHealth']);
+        debugPrint('[AdminController] Restored plantHealth from cache');
+      }
+
+      // ── Restore full communities list ──
+      final cachedCommunities = HiveCacheService.getAdminCommunities();
+      if (cachedCommunities != null && cachedCommunities.isNotEmpty) {
+        _communities = cachedCommunities.map((data) {
+          // Rebuild AdminCommunity from serialized map
+          final membersList = (data['members'] as List? ?? [])
+              .whereType<Map>()
+              .map((m) => AppUser(
+                    id: m['id'] as String? ?? '',
+                    name: m['name'] as String? ?? '',
+                    email: m['email'] as String? ?? '',
+                    role: m['role'] as String? ?? 'User',
+                    walletBalance: (m['walletBalance'] as num?)?.toInt() ?? 0,
+                  ))
+              .toList();
+
+          return AdminCommunity(
+            id: data['id'] as String? ?? '',
+            name: data['name'] as String? ?? '',
+            location: data['location'] as String? ?? '',
+            description: data['description'] as String? ?? '',
+            createdBy: data['createdBy'] as String? ?? '',
+            imageUrl: data['imageUrl'] as String?,
+            category: data['category'] as String? ?? 'General',
+            isActive: data['isActive'] as bool? ?? true,
+            createdAt: DateTime.tryParse(data['createdAt'] as String? ?? '') ??
+                DateTime.now(),
+            members: membersList,
+          );
+        }).toList();
+        _isInitialized = true; // Show dashboard immediately
+        notifyListeners();
+        debugPrint(
+            '[AdminController] Restored ${_communities.length} communities from cache');
+      }
+
+      // ── Restore QR codes ──
+      final cachedQr = HiveCacheService.getAdminQrCodes();
+      if (cachedQr != null && cachedQr.isNotEmpty) {
+        _communityQrCodes.clear();
+        cachedQr.forEach((key, qrList) {
+          final index = int.tryParse(key);
+          if (index != null) {
+            _communityQrCodes[index] =
+                qrList.map((q) => PlantQrCode.fromJson(q)).toList();
+          }
+        });
+        debugPrint(
+            '[AdminController] Restored QR codes for ${_communityQrCodes.keys.length} communities from cache');
+      }
+    } catch (e) {
+      debugPrint('[AdminController] _restoreFromAdminCache error: $e');
+    }
+  }
+
+  /// Serialize and persist all admin state to Hive after a successful Appwrite sync.
+  Future<void> _persistFullAdminCache() async {
+    try {
+      // ── Serialize communities + members ──
+      final serialized = _communities.map((c) {
+        return <String, dynamic>{
+          'id': c.id,
+          'name': c.name,
+          'location': c.location,
+          'description': c.description,
+          'createdBy': c.createdBy,
+          'imageUrl': c.imageUrl,
+          'category': c.category,
+          'isActive': c.isActive,
+          'createdAt': c.createdAt.toIso8601String(),
+          'members': c.members
+              .map((m) => {
+                    'id': m.id,
+                    'name': m.name,
+                    'email': m.email,
+                    'role': m.role,
+                    'walletBalance': m.walletBalance,
+                  })
+              .toList(),
+        };
+      }).toList();
+      await HiveCacheService.cacheAdminCommunities(serialized);
+
+      // ── Serialize QR codes ──
+      final qrSerialized = <String, List<Map<String, dynamic>>>{};
+      _communityQrCodes.forEach((idx, qrList) {
+        qrSerialized[idx.toString()] = qrList
+            .map((q) => {
+                  'id': q.id,
+                  'community_id': q.communityId,
+                  'community_name': q.communityName,
+                  'plant_name': q.plantName,
+                  'plant_type': q.plantType,
+                  'best_season': q.bestSeason,
+                  'notes': q.notes,
+                  'is_seed': q.isSeed,
+                  'plant_age': q.plantAge,
+                  'created_at': q.generatedAt.toIso8601String(),
+                  'is_uploaded': q.isUploaded,
+                })
+            .toList();
+      });
+      await HiveCacheService.cacheAdminQrCodes(qrSerialized);
+
+      // ── Persist stats ──
+      await HiveCacheService.cacheAdminStats({
+        'totalUsers': totalUsers,
+        'plantHealth': plantHealth,
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+
+      debugPrint('[AdminController] Full admin state persisted to Hive');
+    } catch (e) {
+      debugPrint('[AdminController] _persistFullAdminCache error: $e');
+    }
   }
 
   /// Reload all data from the backend.
@@ -443,6 +604,12 @@ class AdminController extends ChangeNotifier {
       await _loadFromAppwrite();
       _serverStatus = "Online";
       _useLocalFallback = false;
+
+      await HiveCacheService.cacheAdminStats({
+        'totalUsers': totalUsers,
+        'plantHealth': plantHealth,
+        'timestamp': DateTime.now().toIso8601String()
+      });
     } catch (e) {
       debugPrint('AdminController: Refresh failed: $e');
       _errorMessage = 'Failed to refresh data. Using cached data.';
@@ -621,8 +788,7 @@ class AdminController extends ChangeNotifier {
         Query.orderDesc('\$createdAt'),
         Query.limit(200),
       ]);
-      debugPrint(
-          'AdminController.getPlantHistoryLogs: Tier-1 returned '
+      debugPrint('AdminController.getPlantHistoryLogs: Tier-1 returned '
           '${directLogs.length} logs for plantId=$plantId');
       for (final log in directLogs) {
         if (seenIds.add(log.id)) matched.add(log);
@@ -648,7 +814,7 @@ class AdminController extends ChangeNotifier {
         try {
           final decoded = jsonDecode(raw);
           if (decoded is Map) {
-            final sourceId  = decoded['source_plant_id']?.toString() ?? '';
+            final sourceId = decoded['source_plant_id']?.toString() ?? '';
             final resolvedId = decoded['resolved_plant_id']?.toString() ?? '';
             final originalId = decoded['plant_id']?.toString() ?? '';
             if (sourceId == plantId ||
@@ -665,12 +831,10 @@ class AdminController extends ChangeNotifier {
 
     // Sort oldest → newest (the UI re-sorts newest first on its end)
     matched.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    debugPrint(
-        'AdminController.getPlantHistoryLogs: returning '
+    debugPrint('AdminController.getPlantHistoryLogs: returning '
         '${matched.length} total logs for plantId=$plantId');
     return matched;
   }
-
 
   // ── Notification & Automation Logic ────────────────────────────────────────
 

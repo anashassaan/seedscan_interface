@@ -1,8 +1,11 @@
 // lib/controllers/auth_controller.dart
 import 'package:flutter/material.dart';
 import 'package:appwrite/appwrite.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/appwrite_service.dart';
 import '../../services/garden_cache_service.dart';
+import '../../services/hive_cache_service.dart';
+import '../../services/llm_service.dart';
 import '../../models/user_model.dart';
 
 class AuthController extends ChangeNotifier {
@@ -10,11 +13,20 @@ class AuthController extends ChangeNotifier {
 
   final AppwriteService _appwriteService = AppwriteService();
 
+  // SharedPreferences keys for persistent login state
+  static const String _keyLoggedIn = 'auth_logged_in';
+  static const String _keyUserId = 'auth_user_id';
+  static const String _keyEmail = 'auth_email';
+  static const String _keyName = 'auth_name';
+  static const String _keyUsername = 'auth_username';
+  static const String _keyIsAdmin = 'auth_is_admin';
+
   // ── State ────────────────────────────────────────────────────────────────
   String? _name;
   String? _email;
   String? _username;
   String? _profileImagePath;
+  bool _isUploadingAvatar = false;
   bool _loggedIn = false;
   bool _isAdmin = false;
   String? _userId;
@@ -30,7 +42,19 @@ class AuthController extends ChangeNotifier {
   String get userName => _name ?? 'Student';
   String get userHandle => _username ?? 'user123';
   String? get userEmail => _email;
+  bool get isUploadingAvatar => _isUploadingAvatar;
   String? get profileImage => _profileImagePath;
+
+  String? get profileImageUrl {
+    if (_userModel?.profileImageId == null) return null;
+    return _appwriteService.getProfileImageUrl(_userModel!.profileImageId!);
+  }
+
+  String get userInitials {
+    final n = _name ?? _username ?? 'U';
+    return n.isNotEmpty ? n[0].toUpperCase() : 'U';
+  }
+
   String? get userId => _userId;
   UserModel? get userModel => _userModel;
   int get walletBalance => _walletBalance;
@@ -69,6 +93,44 @@ class AuthController extends ChangeNotifier {
     if (v == null || v.trim().isEmpty) return 'Email or username required';
     if (v.trim().length < 3) return 'Min 3 characters';
     return null;
+  }
+
+  // ── Persist / clear login state via SharedPreferences ────────────────────
+  Future<void> _saveSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_keyLoggedIn, true);
+      await prefs.setString(_keyUserId, _userId ?? '');
+      await prefs.setString(_keyEmail, _email ?? '');
+      await prefs.setString(_keyName, _name ?? '');
+      await prefs.setString(_keyUsername, _username ?? '');
+      await prefs.setBool(_keyIsAdmin, _isAdmin);
+
+      if (_userModel != null) {
+        await HiveCacheService.cacheUserData(_userModel!.toJson());
+      }
+      debugPrint('[AUTH] Session saved to SharedPreferences and Hive cache');
+    } catch (e) {
+      debugPrint('[AUTH] Failed to save session: $e');
+    }
+  }
+
+  Future<void> _clearSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_keyLoggedIn);
+      await prefs.remove(_keyUserId);
+      await prefs.remove(_keyEmail);
+      await prefs.remove(_keyName);
+      await prefs.remove(_keyUsername);
+      await prefs.remove(_keyIsAdmin);
+
+      await HiveCacheService.clearAll();
+      debugPrint(
+          '[AUTH] Session cleared from SharedPreferences and Hive cache');
+    } catch (e) {
+      debugPrint('[AUTH] Failed to clear session: $e');
+    }
   }
 
   // ── Sign In (supports email OR username) ──────────────────────────────────
@@ -121,7 +183,12 @@ class AuthController extends ChangeNotifier {
           debugPrint(
               '[AUTH] signIn complete — isAdmin=$_isAdmin, userId=$_userId');
 
+          await _saveSession();
           notifyListeners();
+
+          // 🔥 Automatically begin background AI model download
+          LLMService().initialize().catchError((_) {});
+
           return true;
         }
       }
@@ -205,7 +272,12 @@ class AuthController extends ChangeNotifier {
         // Set admin directly from chosen role (reliable, no DB read-back needed)
         _isAdmin = role == 'admin';
 
+        await _saveSession();
         notifyListeners();
+
+        // 🔥 Automatically begin background AI model download
+        LLMService().initialize().catchError((_) {});
+
         return true;
       }
     } on AppwriteException catch (e) {
@@ -248,6 +320,15 @@ class AuthController extends ChangeNotifier {
       debugPrint('GardenCacheService clearAll error: $e');
     }
 
+    // CRITICAL: Wipe admin cache so the next admin user doesn't see previous admin's data
+    try {
+      await HiveCacheService.clearAdminCache();
+    } catch (e) {
+      debugPrint('HiveCacheService clearAdminCache error: $e');
+    }
+
+    await _clearSession();
+
     _loggedIn = false;
     _isAdmin = false;
     _name = null;
@@ -263,35 +344,93 @@ class AuthController extends ChangeNotifier {
   }
 
   // ── Initialize (check existing session on app start) ─────────────────────
+  /// Cache-first strategy: Load from Hive/SharedPrefs instantly, then sync from Appwrite
   Future<void> initialize() async {
+    _appwriteService.initialize();
+
+    // STEP 1: INSTANT LOAD FROM CACHE (Hive + SharedPreferences)
+    await _restoreFromPrefs();
+
+    // STEP 2: BACKGROUND SYNC WITH APPWRITE (silent refresh)
+    _syncWithAppwriteInBackground();
+  }
+
+  /// Background sync: Refreshes user data from Appwrite without blocking UI
+  Future<void> _syncWithAppwriteInBackground() async {
     try {
-      _appwriteService.initialize();
+      debugPrint('[AUTH] Starting background Appwrite sync...');
       final user = await _appwriteService.getCurrentUser();
+
       if (user != null) {
+        debugPrint('[AUTH] Active Appwrite session found for ${user.$id}');
         _userId = user.$id;
         _email = user.email;
-        _name = user.name;
         _username = user.email.split('@').first;
         _loggedIn = true;
 
-        // Load user profile document
+        // Load fresh user profile from Appwrite
         await _loadUserProfile(user.$id);
 
-        // Check admin role — prefer the already-loaded profile
+        // Check admin role from refreshed profile
         if (_userModel != null && _userModel!.isAdmin) {
           _isAdmin = true;
           debugPrint(
-              '[AUTH] init: Admin detected from profile (role=${_userModel!.role})');
+              '[AUTH] Admin detected from profile (role=${_userModel!.role})');
         } else {
           _isAdmin = await _appwriteService.isAdmin();
-          debugPrint('[AUTH] init: isAdmin from service: $_isAdmin');
+          debugPrint('[AUTH] isAdmin from service: $_isAdmin');
         }
+
+        // Update cache with fresh data
+        await _saveSession();
         debugPrint(
-            '[AUTH] initialize complete — isAdmin=$_isAdmin, userId=$_userId');
+            '[AUTH] Background sync complete — isAdmin=$_isAdmin, userId=$_userId');
+        notifyListeners();
+      } else {
+        debugPrint('[AUTH] No active Appwrite session — user logged out');
+        await _clearSession();
         notifyListeners();
       }
     } catch (e) {
-      debugPrint('Auth initialization error: $e');
+      debugPrint(
+          '[AUTH] Background Appwrite sync error (using cached data): $e');
+      // User continues with cached data; no interruption
+    }
+  }
+
+  /// Restore cached auth state from SharedPreferences & Hive (offline/instant load).
+  Future<void> _restoreFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final wasLoggedIn = prefs.getBool(_keyLoggedIn) ?? false;
+      if (!wasLoggedIn) return;
+
+      _userId = prefs.getString(_keyUserId);
+      _email = prefs.getString(_keyEmail);
+      _name = prefs.getString(_keyName);
+      _username = prefs.getString(_keyUsername);
+      _isAdmin = prefs.getBool(_keyIsAdmin) ?? false;
+      _loggedIn = true;
+
+      // Extract User model from Hive for instantaneous data loading
+      final userData = HiveCacheService.getUserData();
+      if (userData != null) {
+        _userModel = UserModel.fromJson(userData);
+        _walletBalance = _userModel!.walletBalance;
+        _currentStreak = _userModel!.currentStreak;
+
+        if (_userModel!.name.isNotEmpty) _name = _userModel!.name;
+        if (_userModel!.username.isNotEmpty) _username = _userModel!.username;
+      }
+
+      debugPrint(
+          '[AUTH] Restored from SharedPreferences & Hive — userId=$_userId, isAdmin=$_isAdmin');
+      notifyListeners();
+
+      // 🔥 Automatically begin background AI model download
+      LLMService().initialize().catchError((_) {});
+    } catch (e) {
+      debugPrint('[AUTH] Failed to restore from SharedPreferences/Hive: $e');
     }
   }
 
@@ -321,11 +460,53 @@ class AuthController extends ChangeNotifier {
   }
 
   // ── Update profile ──────────────────────────────────────────────────────
-  void updateProfile({required String name, String? imagePath}) {
+  Future<void> updateProfileName(String name) async {
     _name = name;
-    if (imagePath != null) {
-      _profileImagePath = imagePath;
+    if (_userModel != null) {
+      _userModel = _userModel!.copyWith(name: name);
+      try {
+        await _appwriteService.updateDocument(
+          collectionId: AppwriteService.usersCollectionId,
+          documentId: _userId!,
+          data: {'name': name},
+        );
+      } catch (e) {
+        debugPrint('[AUTH] Failed to update name in DB: \$e');
+      }
     }
+    await _saveSession();
     notifyListeners();
+  }
+
+  Future<void> uploadAvatar(String imagePath) async {
+    if (_userId == null) return;
+    try {
+      _isUploadingAvatar = true;
+      notifyListeners();
+
+      // Upload file directly to the Profile Images Bucket
+      final uploadedFile = await _appwriteService.uploadProfileImage(imagePath);
+
+      // (Optional) Delete old avatar file here if passing old ID to AppwriteService
+      if (_userModel?.profileImageId != null) {
+        await _appwriteService.deleteProfileImage(_userModel!.profileImageId!);
+      }
+
+      // Update Database UserModel
+      await _appwriteService.updateDocument(
+        collectionId: AppwriteService.usersCollectionId,
+        documentId: _userId!,
+        data: {'profile_image_id': uploadedFile.$id},
+      );
+
+      // Refresh Memory & Cache
+      _userModel = _userModel!.copyWith(profileImageId: uploadedFile.$id);
+      await _saveSession();
+    } catch (e) {
+      debugPrint('[AUTH] Avatar upload failed: \$e');
+    } finally {
+      _isUploadingAvatar = false;
+      notifyListeners();
+    }
   }
 }

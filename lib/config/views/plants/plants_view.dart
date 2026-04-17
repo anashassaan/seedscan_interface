@@ -294,7 +294,7 @@ class _CommunityCard extends StatelessWidget {
                           errorBuilder: (context, error, stackTrace) {
                             return Container(
                               height: 160,
-                              color: cs.surfaceVariant,
+                              color: cs.surfaceContainerHighest,
                               child: Icon(
                                 LucideIcons.image,
                                 size: 64,
@@ -305,7 +305,7 @@ class _CommunityCard extends StatelessWidget {
                         )
                       : Container(
                           height: 160,
-                          color: cs.surfaceVariant,
+                          color: cs.surfaceContainerHighest,
                           child: Icon(
                             LucideIcons.users,
                             size: 64,
@@ -504,7 +504,7 @@ class _MyGardenPlantCard extends StatelessWidget {
                 errorBuilder: (context, error, stackTrace) {
                   return Container(
                     height: 180,
-                    color: cs.surfaceVariant,
+                    color: cs.surfaceContainerHighest,
                     child: Center(
                       child: Icon(
                         LucideIcons.flower2,
@@ -651,7 +651,7 @@ class _MyGardenPlantCard extends StatelessWidget {
                       errorBuilder: (context, error, stackTrace) {
                         return Container(
                           height: 200,
-                          color: Theme.of(context).colorScheme.surfaceVariant,
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
                           child: Center(
                             child: Icon(
                               LucideIcons.flower2,
@@ -844,7 +844,7 @@ class _MyGardenPlantCard extends StatelessWidget {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Text(
           'Update Location',
           style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
@@ -889,7 +889,7 @@ class _MyGardenPlantCard extends StatelessWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: Text(
               'Cancel',
               style: GoogleFonts.inter(),
@@ -911,7 +911,7 @@ class _MyGardenPlantCard extends StatelessWidget {
                 return;
               }
 
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
 
               try {
                 final result = await scanController.updatePlantLocationWithName(
@@ -921,6 +921,18 @@ class _MyGardenPlantCard extends StatelessWidget {
 
                 if (context.mounted) {
                   if (result['success']) {
+                    try {
+                      Provider.of<CommunityController>(context, listen: false)
+                          .syncPlantLocationLocal(
+                        plant.id,
+                        locationName,
+                        result['latitude'] ?? 0.0,
+                        result['longitude'] ?? 0.0,
+                      );
+                    } catch (e) {
+                      debugPrint('Sync to CommunityController failed: $e');
+                    }
+
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
@@ -978,9 +990,9 @@ class _MyGardenPlantCard extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      builder: (context) => Container(
+      builder: (sheetContext) => Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).scaffoldBackgroundColor,
+          color: Theme.of(sheetContext).scaffoldBackgroundColor,
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(20),
             topRight: Radius.circular(20),
@@ -1025,7 +1037,7 @@ class _MyGardenPlantCard extends StatelessWidget {
                         icon: LucideIcons.camera,
                         label: 'Camera',
                         onTap: () async {
-                          Navigator.pop(context);
+                          Navigator.pop(sheetContext);
                           final XFile? image = await picker.pickImage(
                             source: ImageSource.camera,
                             maxWidth: 1200,
@@ -1061,7 +1073,7 @@ class _MyGardenPlantCard extends StatelessWidget {
                         icon: LucideIcons.image,
                         label: 'Gallery',
                         onTap: () async {
-                          Navigator.pop(context);
+                          Navigator.pop(sheetContext);
                           final XFile? image = await picker.pickImage(
                             source: ImageSource.gallery,
                           );
@@ -1218,7 +1230,7 @@ class _CommunityPlantCardState extends State<_CommunityPlantCard> {
                   errorBuilder: (context, error, stackTrace) {
                     return Container(
                       height: 200,
-                      color: cs.surfaceVariant,
+                      color: cs.surfaceContainerHighest,
                       child: Center(
                         child: Icon(
                           LucideIcons.flower2,

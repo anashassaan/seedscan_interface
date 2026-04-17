@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../appwrite_constants.dart';
 import '../../controllers/scan_controller.dart';
+import '../../controllers/community_controller.dart';
 import '../../controllers/auth_controller.dart';
 import 'qr_scanner_screen.dart';
 import 'generate_qr_screen.dart';
@@ -57,11 +58,61 @@ class _MyGardenScreenState extends State<MyGardenScreen>
     final userId = auth.userId;
     if (userId == null) return;
 
-    setState(() => _isLoadingQRCodes = true);
+    // ── STEP 1: INSTANT LOAD FROM CACHE ──────────────────────────────────
+    // Show cached QR entries immediately without ANY spinner.
+    _loadQRCodesFromCache();
+
+    // ── STEP 2: BACKGROUND SYNC WITH APPWRITE ────────────────────────────
+    // Silently refresh from Appwrite; UI updates reactively when done.
+    _syncQRCodesFromAppwrite(userId);
+  }
+
+  /// Load QR code list from GardenCacheService (instant, no network needed).
+  void _loadQRCodesFromCache() {
+    try {
+      final cached = GardenCacheService.getAllCachedQRetails();
+      if (cached != null && cached.isNotEmpty) {
+        // Build MyGardenQRModel stubs from the lightweight Hive cache entries.
+        // Required fields that aren't in the cache get safe defaults; they are
+        // filled in with real values after the background Appwrite sync.
+        final stubs = cached
+            .map((data) {
+              return MyGardenQRModel(
+                id: data['docId'] as String? ?? '',
+                uniqueCode: '',
+                plantName: data['plantName'] as String? ?? '',
+                localName: data['localName'] as String? ?? '',
+                category: data['category'] as String? ?? '',
+                bestSeason: '',
+                qrType: 'Plant',
+                ownerId: '',
+                ownerName: '',
+                gardenId: '',
+                createdAt: DateTime.now(),
+                imageUrl: data['imageUrl'] as String?,
+                imageFileId: data['imageFileId'] as String?,
+              );
+            })
+            .where((m) => m.id.isNotEmpty)
+            .toList();
+
+        if (mounted && stubs.isNotEmpty) {
+          setState(() => _myGardenQRCodes = stubs);
+          debugPrint(
+              '[MyGardenScreen] Loaded ${stubs.length} QR stubs from cache');
+        }
+      }
+    } catch (e) {
+      debugPrint('[MyGardenScreen] _loadQRCodesFromCache error: $e');
+    }
+  }
+
+  /// Fetch fresh QR codes from Appwrite and update the UI silently.
+  Future<void> _syncQRCodesFromAppwrite(String userId) async {
     try {
       final codes = await _dbService.listMyGardenQRCodes(userId);
 
-      // Sync freshly fetched data into Hive so it survives navigation
+      // Sync freshly fetched data into Hive so it survives navigation.
       await GardenCacheService.syncAll(
         codes
             .map((qr) => {
@@ -82,13 +133,14 @@ class _MyGardenScreenState extends State<MyGardenScreen>
         scanCtrl.updateFromQRCodes(codes);
       }
 
-      setState(() {
-        _myGardenQRCodes = codes;
-        _isLoadingQRCodes = false;
-      });
+      if (mounted) {
+        setState(() => _myGardenQRCodes = codes);
+        debugPrint(
+            '[MyGardenScreen] Background sync complete — ${codes.length} QR codes');
+      }
     } catch (e) {
-      debugPrint('Error loading My Garden QR codes: $e');
-      setState(() => _isLoadingQRCodes = false);
+      debugPrint('[MyGardenScreen] _syncQRCodesFromAppwrite error: $e');
+      // Cache data remains visible; no error shown to user.
     }
   }
 
@@ -931,7 +983,7 @@ class _MyGardenScreenState extends State<MyGardenScreen>
                               borderRadius: BorderRadius.circular(20),
                               child: currentImageUrl != null
                                   ? CachedNetworkImage(
-                                      imageUrl: currentImageUrl!,
+                                      imageUrl: currentImageUrl,
                                       httpHeaders: const {
                                         'X-Appwrite-Project':
                                             AppwriteConstants.projectId,
@@ -1633,6 +1685,20 @@ class _MyGardenScreenState extends State<MyGardenScreen>
 
                         if (context.mounted) {
                           if (result['success']) {
+                            try {
+                              Provider.of<CommunityController>(context,
+                                      listen: false)
+                                  .syncPlantLocationLocal(
+                                plant.id,
+                                'Updated Location',
+                                result['latitude'] ?? 0.0,
+                                result['longitude'] ?? 0.0,
+                              );
+                            } catch (e) {
+                              debugPrint(
+                                  'Sync to CommunityController failed: $e');
+                            }
+
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(

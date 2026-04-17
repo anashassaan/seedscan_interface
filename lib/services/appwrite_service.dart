@@ -1,5 +1,6 @@
 // lib/services/appwrite_service.dart
 import 'package:appwrite/appwrite.dart';
+import 'package:appwrite/models.dart' as models;
 import 'package:flutter/foundation.dart';
 import '../config/appwrite_constants.dart';
 
@@ -53,6 +54,8 @@ class AppwriteService {
   static const String plantImagesBucket = AppwriteConstants.plantImagesBucket;
   static const String communityMediaBucket =
       AppwriteConstants.communityMediaBucket;
+  static const String modelsBucket = AppwriteConstants.modelsBucket;
+  static const String profileImagesBucket = AppwriteConstants.profileImagesBucket;
 
   // Cloud function IDs
   static const String verifyActionFunctionId =
@@ -69,7 +72,7 @@ class AppwriteService {
     _client = Client()
         .setEndpoint(endpoint)
         .setProject(projectId)
-        .setSelfSigned(status: true); // dev only
+        .setSelfSigned(status: false); // production: Appwrite Cloud has valid SSL
 
     _account = Account(_client);
     _databases = Databases(_client);
@@ -511,5 +514,36 @@ class AppwriteService {
     } catch (e) {
       return {'totalRewards': 0};
     }
+  }
+
+  // === Storage Methods ===
+
+  Future<models.File> uploadProfileImage(String filePath) async {
+    try {
+      final file = await _storage.createFile(
+        bucketId: profileImagesBucket,
+        fileId: ID.unique(),
+        file: InputFile.fromPath(path: filePath),
+      );
+      return file;
+    } catch (e) {
+      debugPrint('[AppwriteService] Error uploading profile image: \$e');
+      rethrow;
+    }
+  }
+
+  Future<void> deleteProfileImage(String fileId) async {
+    try {
+      await _storage.deleteFile(
+        bucketId: profileImagesBucket,
+        fileId: fileId,
+      );
+    } catch (e) {
+      debugPrint('[AppwriteService] Error deleting previous profile image: \$e');
+    }
+  }
+
+  String getProfileImageUrl(String fileId) {
+    return '\$endpoint/storage/buckets/\$profileImagesBucket/files/\$fileId/view?project=\$projectId';
   }
 }

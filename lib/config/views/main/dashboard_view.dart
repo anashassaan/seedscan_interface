@@ -16,12 +16,23 @@ class DashboardView extends StatefulWidget {
 }
 
 class _DashboardViewState extends State<DashboardView> {
-  // NOTE: You are creating a new ScanController instance here,
-  // ensure this is correct if your provider setup expects it differently.
-  final ScanController scanController = ScanController();
+  @override
+  void initState() {
+    super.initState();
+    // Load plants when dashboard view is shown
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final auth = Provider.of<AuthController>(context, listen: false);
+      final uid = auth.userId ?? '';
+      if (uid.isNotEmpty) {
+        final scan = Provider.of<ScanController>(context, listen: false);
+        scan.loadMyPlants(uid);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
+    final scanController = Provider.of<ScanController>(context);
     final plants = scanController.getMyPlants();
     final auth = Provider.of<AuthController>(context);
     final userName = auth.userName;

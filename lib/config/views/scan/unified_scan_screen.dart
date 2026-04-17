@@ -315,24 +315,6 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
     }
   }
 
-  // Helper function to get severity name
-  String _getSeverityName(int level) {
-    switch (level) {
-      case 1:
-        return 'Minimal';
-      case 2:
-        return 'Mild';
-      case 3:
-        return 'Moderate';
-      case 4:
-        return 'Severe';
-      case 5:
-        return 'Critical';
-      default:
-        return 'Unknown';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final scan = Provider.of<ScanController>(context);
@@ -758,9 +740,9 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
                   ),
                   elevation: 0,
                 ),
-                child: Row(
+                child: const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
+                  children: [
                     Icon(Icons.add_a_photo, size: 24),
                     SizedBox(width: 12),
                     Text(
@@ -1005,8 +987,19 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
                         // Pass info to chat and navigate
                         final chatCtrl =
                             Provider.of<ChatController>(context, listen: false);
-                        chatCtrl.sendText(
-                            'I scanned an apple leaf and it was diagnosed with $diseaseName (Confidence: ${((confidenceLevel ?? 0) * 100).toStringAsFixed(1)}%). What should I do for this?');
+
+                        final severity = severityLevel ??
+                            (diseaseName == 'Healthy' ? 'Low' : 'Moderate');
+                        final confidence =
+                            ((confidenceLevel ?? 0) * 100).toStringAsFixed(0);
+
+                        // EXACT format required by the SeedScan Expert v7 model
+                        final report =
+                            "Disease Diagnosis Report. Disease: $diseaseName. "
+                            "Severity: $severity. Confidence: $confidence%. "
+                            "Please provide treatment recommendations.";
+
+                        chatCtrl.sendText(report);
 
                         if (widget.onNavigateToChat != null) {
                           widget.onNavigateToChat!();

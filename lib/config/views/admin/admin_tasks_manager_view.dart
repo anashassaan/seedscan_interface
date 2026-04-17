@@ -99,7 +99,7 @@ class _AdminTasksManagerViewState extends State<AdminTasksManagerView> {
     final cs = Theme.of(context).colorScheme;
     
     return Scaffold(
-      backgroundColor: cs.background,
+      backgroundColor: cs.surface,
       appBar: AppBar(
         backgroundColor: cs.primary,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -221,7 +221,7 @@ class _AdminTasksManagerViewState extends State<AdminTasksManagerView> {
                         children: [
                           DropdownButtonFormField<String>(
                             isExpanded: true,
-                            value: _targetType,
+                            initialValue: _targetType,
                             decoration: const InputDecoration(
                               labelText: 'Target Type',
                               prefixIcon: Icon(LucideIcons.users),
@@ -262,7 +262,7 @@ class _AdminTasksManagerViewState extends State<AdminTasksManagerView> {
                                     filled: true,
                                     fillColor: cs.surface,
                                   ),
-                                  value: (options.contains(_targetValueController.text) && _targetValueController.text.isNotEmpty) 
+                                  initialValue: (options.contains(_targetValueController.text) && _targetValueController.text.isNotEmpty) 
                                       ? _targetValueController.text 
                                       : null,
                                   items: options.map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList(),
@@ -413,7 +413,7 @@ class _AdminTasksManagerViewState extends State<AdminTasksManagerView> {
 
   Widget _buildDropdownField(String label, String value, List<String> items, Function(String?) onChanged) {
     return DropdownButtonFormField<String>(
-      value: value,
+      initialValue: value,
       decoration: InputDecoration(labelText: label),
       items: items.map((i) => DropdownMenuItem(value: i, child: Text(i.toUpperCase(), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)))).toList(),
       onChanged: onChanged,

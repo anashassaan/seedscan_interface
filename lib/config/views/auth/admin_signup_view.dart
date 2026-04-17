@@ -244,9 +244,9 @@ class _AdminSignUpViewState extends State<AdminSignUpView> {
                     ? const Center(child: CircularProgressIndicator())
                     : CustomButton(
                         onPressed: _submit,
-                        child: Row(
+                        child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
+                          children: [
                             Icon(Icons.admin_panel_settings_rounded),
                             SizedBox(width: 8),
                             Text('Register as Admin'),

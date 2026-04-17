@@ -29,7 +29,7 @@ class DiseaseClassifierService {
     try {
       // Load model bytes via rootBundle (most reliable cross-platform)
       final modelData = await rootBundle
-          .load('assets/models/mobilenetv3_apple_disease.tflite');
+          .load('assets/models/mobilenetv3_large_disease_updted.tflite');
       final buffer = modelData.buffer.asUint8List();
 
       _interpreter = Interpreter.fromBuffer(buffer);
@@ -60,7 +60,16 @@ class DiseaseClassifierService {
     final int width = _inputShape[2];
     final int channels = _inputShape.length > 3 ? _inputShape[3] : 1;
 
-    final resized = img.copyResize(image, width: width, height: height);
+    final int minSide = math.min(image.width, image.height);
+    final int cropX = (image.width - minSide) ~/ 2;
+    final int cropY = (image.height - minSide) ~/ 2;
+
+    // First crop to square to prevent distortion, then use linear interpolation
+    // to match Keras PIL Bilinear resizing.
+    final cropped = img.copyCrop(image,
+        x: cropX, y: cropY, width: minSide, height: minSide);
+    final resized = img.copyResize(cropped,
+        width: width, height: height, interpolation: img.Interpolation.linear);
 
     // Build input tensor matching model's expected shape
     var input = _buildInputTensor(resized, height, width, channels);
@@ -132,12 +141,10 @@ class DiseaseClassifierService {
   /// which is standard for MobileNetV3 models trained with PyTorch/torchvision.
   static List _buildInputTensor(
       img.Image image, int height, int width, int channels) {
-    // ImageNet normalization constants
-    const List<double> mean = [0.485, 0.456, 0.406];
-    const List<double> std = [0.229, 0.224, 0.225];
-
+    // ⚠️ Keras MobileNetV3 expects raw [0-255] floats because tf.keras Rescaling is built-in.
+    // Removed the incorrect PyTorch ImageNet normalize (mean/std subtraction).
     if (channels >= 3) {
-      // RGB input [1, H, W, 3] with ImageNet normalization
+      // RGB input [1, H, W, 3] with [0.0, 255.0] mapping
       return List.generate(
         1,
         (_) => List.generate(
@@ -145,9 +152,9 @@ class DiseaseClassifierService {
           (y) => List.generate(width, (x) {
             final pixel = image.getPixel(x, y);
             return [
-              (pixel.r.toDouble() / 255.0 - mean[0]) / std[0],
-              (pixel.g.toDouble() / 255.0 - mean[1]) / std[1],
-              (pixel.b.toDouble() / 255.0 - mean[2]) / std[2],
+              pixel.r.toDouble(),
+              pixel.g.toDouble(),
+              pixel.b.toDouble(),
             ];
           }),
         ),
@@ -160,20 +167,20 @@ class DiseaseClassifierService {
           height,
           (y) => List.generate(width, (x) {
             final pixel = image.getPixel(x, y);
-            final lum = img.getLuminance(pixel) / 255.0;
-            return [(lum - 0.449) / 0.226]; // grayscale ImageNet approx
+            final lum = img.getLuminance(pixel);
+            return [lum.toDouble()]; // 0-255 scale
           }),
         ),
       );
     } else {
-      // Fallback: 3D tensor [1, H, W] — grayscale without channel dim
+      // Fallback: 3D tensor [1, H, W] grayscale without channel dim
       return List.generate(
         1,
         (_) => List.generate(
           height,
           (y) => List.generate(width, (x) {
             final pixel = image.getPixel(x, y);
-            return img.getLuminance(pixel) / 255.0;
+            return img.getLuminance(pixel).toDouble();
           }),
         ),
       );

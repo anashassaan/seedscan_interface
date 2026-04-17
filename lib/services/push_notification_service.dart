@@ -88,7 +88,7 @@ class PushNotificationService {
     await unsubscribe(); // clean up any prior subscription
 
     try {
-      final channel =
+      const channel =
           'databases.${AppwriteConstants.databaseId}.collections.${AppwriteConstants.notificationsCollection}.documents';
 
       // CRITICAL FIX: Create Realtime AND call subscribe() INSIDE runZonedGuarded.

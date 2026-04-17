@@ -207,7 +207,7 @@ class _ManageCommunitiesViewState extends State<ManageCommunitiesView> {
                             width: double.infinity,
                             height: 160,
                             decoration: BoxDecoration(
-                              color: cs.surfaceVariant.withOpacity(0.4),
+                              color: cs.surfaceContainerHighest.withOpacity(0.4),
                               borderRadius: BorderRadius.circular(16),
                               border: Border.all(
                                 color: imageError != null
@@ -308,7 +308,7 @@ class _ManageCommunitiesViewState extends State<ManageCommunitiesView> {
                             prefixIcon:
                                 Icon(LucideIcons.users, color: cs.primary),
                             filled: true,
-                            fillColor: cs.surfaceVariant.withOpacity(0.4),
+                            fillColor: cs.surfaceContainerHighest.withOpacity(0.4),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
                               borderSide: BorderSide.none,
@@ -341,7 +341,7 @@ class _ManageCommunitiesViewState extends State<ManageCommunitiesView> {
                             prefixIcon:
                                 Icon(LucideIcons.mapPin, color: cs.primary),
                             filled: true,
-                            fillColor: cs.surfaceVariant.withOpacity(0.4),
+                            fillColor: cs.surfaceContainerHighest.withOpacity(0.4),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
                               borderSide: BorderSide.none,
@@ -371,7 +371,7 @@ class _ManageCommunitiesViewState extends State<ManageCommunitiesView> {
                             prefixIcon:
                                 Icon(LucideIcons.userCheck, color: cs.primary),
                             filled: true,
-                            fillColor: cs.surfaceVariant.withOpacity(0.4),
+                            fillColor: cs.surfaceContainerHighest.withOpacity(0.4),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
                               borderSide: BorderSide.none,
@@ -393,13 +393,13 @@ class _ManageCommunitiesViewState extends State<ManageCommunitiesView> {
 
                         // ── Category Dropdown ──
                         DropdownButtonFormField<String>(
-                          value: selectedCategory,
+                          initialValue: selectedCategory,
                           decoration: InputDecoration(
                             labelText: 'Category',
                             prefixIcon:
                                 Icon(LucideIcons.tag, color: cs.primary),
                             filled: true,
-                            fillColor: cs.surfaceVariant.withOpacity(0.4),
+                            fillColor: cs.surfaceContainerHighest.withOpacity(0.4),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
                               borderSide: BorderSide.none,
@@ -439,7 +439,7 @@ class _ManageCommunitiesViewState extends State<ManageCommunitiesView> {
                                   Icon(LucideIcons.fileText, color: cs.primary),
                             ),
                             filled: true,
-                            fillColor: cs.surfaceVariant.withOpacity(0.4),
+                            fillColor: cs.surfaceContainerHighest.withOpacity(0.4),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
                               borderSide: BorderSide.none,
@@ -565,7 +565,7 @@ class _ManageCommunitiesViewState extends State<ManageCommunitiesView> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 24),
         decoration: BoxDecoration(
-          color: cs.surfaceVariant.withOpacity(0.4),
+          color: cs.surfaceContainerHighest.withOpacity(0.4),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: cs.outlineVariant.withOpacity(0.5)),
         ),
@@ -659,10 +659,10 @@ class _ManageCommunitiesViewState extends State<ManageCommunitiesView> {
             width: double.infinity,
             padding: EdgeInsets.fromLTRB(24, topPad + 16, 24, 28),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 colors: [
-                  const Color(0xFF0BA360),
-                  const Color(0xFF3CBA92),
+                  Color(0xFF0BA360),
+                  Color(0xFF3CBA92),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -755,7 +755,7 @@ class _ManageCommunitiesViewState extends State<ManageCommunitiesView> {
                         prefixIcon: Icon(LucideIcons.search,
                             color: cs.onSurface.withOpacity(0.5)),
                         filled: true,
-                        fillColor: cs.surfaceVariant.withOpacity(0.4),
+                        fillColor: cs.surfaceContainerHighest.withOpacity(0.4),
                         contentPadding:
                             const EdgeInsets.symmetric(vertical: 14),
                         border: OutlineInputBorder(
