@@ -47,10 +47,10 @@ app.*.map.json
 # Large Machine Learning Models & Native Libs
 android/app/src/main/jniLibs/
 extra_assets/models/
-assets/models/
-*.tflite
+assets/models/best_float32.tflite
 *.gguf
 *.h5
 *.keras
 *.pt
 *.bin
+assets/models/mobilenetv3_large_disease_updted.tflite
