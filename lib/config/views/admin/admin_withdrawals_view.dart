@@ -116,9 +116,11 @@ class _AdminWithdrawalsViewState extends State<AdminWithdrawalsView> {
               size: 28,
             ),
             const SizedBox(width: 12),
-            Text(
-              isApprove ? 'Approve Request' : 'Reject Request',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            Flexible(
+              child: Text(
+                isApprove ? 'Approve Request' : 'Reject Request',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+              ),
             ),
           ],
         ),
@@ -348,41 +350,50 @@ class _WithdrawalRequestCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      withdrawal.accountTitle,
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        withdrawal.accountTitle,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    Text(
-                      'User ID: ${withdrawal.userId.substring(0, 8)}...',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: cs.onSurface.withOpacity(0.6),
+                      Text(
+                        'User ID: ${withdrawal.userId.substring(0, 8)}...',
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: cs.onSurface.withOpacity(0.6),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade100,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: Colors.orange.shade300),
-                  ),
-                  child: Text(
-                    withdrawal.status.name.toUpperCase(),
-                    style: GoogleFonts.poppins(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.orange.shade900,
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade100,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.orange.shade300),
+                    ),
+                    child: Text(
+                      withdrawal.status.name.toUpperCase(),
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.orange.shade900,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),

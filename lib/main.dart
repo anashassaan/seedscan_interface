@@ -178,8 +178,10 @@ class _EntryDeciderState extends State<EntryDecider> {
     final notifCtrl =
         Provider.of<NotificationController>(context, listen: false);
     final walletCtrl = Provider.of<WalletController>(context, listen: false);
+    final withdrawalCtrl =
+        Provider.of<WithdrawalController>(context, listen: false);
 
-    // All four are intentionally NOT awaited — they are truly fire-and-forget.
+    // All are intentionally NOT awaited — they are truly fire-and-forget.
     // Each controller:
     //   1. Loads from Hive instantly → calls notifyListeners() → UI updates
     //   2. Syncs with Appwrite in background → calls notifyListeners() again
@@ -191,6 +193,8 @@ class _EntryDeciderState extends State<EntryDecider> {
     notifCtrl.initialize(userId);
     // ignore: unawaited_futures
     walletCtrl.fetchWalletData(userId);
+    // ignore: unawaited_futures
+    withdrawalCtrl.fetchUserWithdrawalHistory(userId);
   }
 
   @override

@@ -125,13 +125,23 @@ class PushNotificationService {
                     e.toString().contains('.documents.*.create') ||
                     (e.toString().contains('.documents.') &&
                         e.toString().endsWith('.create')));
+
+                // Safety: check is_read flag. If the notification is already read
+                // (e.g. from another device or if we received an update), skip popup.
+                final bool isRead = payload['is_read'] ?? false;
+                if (isRead) return;
+
                 if (!isCreate) return; // ignore update / delete events
 
                 final recipientId = payload['recipient_id'] ?? '';
                 if (recipientId == userId || recipientId == 'all') {
                   final title = payload['title'] ?? 'SeedScan';
                   final body = payload['body'] ?? '';
-                  _showLocalNotification(title: title, body: body);
+                  final docId = payload['\$id'] ?? payload['id'] ?? '';
+
+                  // Use document ID hash to prevent duplicate popups for the same notification
+                  _showLocalNotification(
+                      id: docId.hashCode, title: title, body: body);
                   onNotification(payload);
                 }
               } catch (e) {
@@ -164,6 +174,7 @@ class PushNotificationService {
 
   // ── Show a local system notification ─────────────────────────────────────
   Future<void> _showLocalNotification({
+    required int id,
     required String title,
     required String body,
   }) async {
@@ -188,7 +199,7 @@ class PushNotificationService {
           NotificationDetails(android: androidDetails, iOS: iosDetails);
 
       await _flnp.show(
-        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        id,
         title,
         body,
         details,
@@ -203,6 +214,9 @@ class PushNotificationService {
     required String title,
     required String body,
   }) async {
-    await _showLocalNotification(title: title, body: body);
+    await _showLocalNotification(
+        id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        title: title,
+        body: body);
   }
 }

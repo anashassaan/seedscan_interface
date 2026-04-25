@@ -31,8 +31,15 @@ class HomeView extends StatelessWidget {
     final scanController = Provider.of<ScanController>(context);
     final walletController = Provider.of<WalletController>(context);
     final communityController = Provider.of<CommunityController>(context);
-    final plantsCount = scanController.getMyPlants().length +
-        communityController.getTotalCommunityPlantsCount();
+    
+    // Count unique plants (Personal + Community)
+    final personalPlants = scanController.getMyPlants();
+    final communityPlants = communityController.getAllCommunityPlants();
+    final uniquePlantIds = {
+      ...personalPlants.map((p) => p.id),
+      ...communityPlants.map((p) => p.id),
+    };
+    final plantsCount = uniquePlantIds.length;
 
     return Scaffold(
       body: Stack(
@@ -413,7 +420,7 @@ class HomeView extends StatelessWidget {
     );
   }
 
-   // Plants Preview — loaded from Appwrite via ScanController & CommunityController
+  // Plants Preview — loaded from Appwrite via ScanController & CommunityController
   Widget _plantsPreview(
       ScanController scanController, CommunityController communityController) {
     if (scanController.isLoadingPlants ||
@@ -437,14 +444,10 @@ class HomeView extends StatelessWidget {
 
     // Merge personal plants and community plants
     final List<PlantModel> unifiedPlants = [];
-
-    // Add personal plants
     unifiedPlants.addAll(scanController.getMyPlants());
 
-    // Add community plants (converted to PlantModel)
     final communityPlants = communityController.getAllCommunityPlants();
     for (final cp in communityPlants) {
-      // Avoid duplicates if a plant happens to be in both (unlikely but safe)
       if (!unifiedPlants.any((p) => p.id == cp.id)) {
         unifiedPlants.add(PlantModel(
           id: cp.id,
@@ -463,7 +466,9 @@ class HomeView extends StatelessWidget {
       }
     }
 
-    if (unifiedPlants.isEmpty) {
+    final plants = unifiedPlants;
+
+    if (plants.isEmpty) {
       return Container(
         height: 160,
         decoration: BoxDecoration(
@@ -504,9 +509,9 @@ class HomeView extends StatelessWidget {
         height: 160,
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
-          itemCount: unifiedPlants.length,
+          itemCount: plants.length,
           itemBuilder: (context, index) {
-            final plant = unifiedPlants[index];
+            final plant = plants[index];
             return _plantBox(plant.name, plant.status, plant.image,
                 plant.statusColor, plant.lastScan, cardW);
           },
@@ -516,8 +521,9 @@ class HomeView extends StatelessWidget {
   }
 
   // Plant card — real data
-  Widget _plantBox(String name, String status, String img, Color statusColor,
-      String date, [double width = 140]) {
+  Widget _plantBox(
+      String name, String status, String img, Color statusColor, String date,
+      [double width = 140]) {
     return Container(
       width: width,
       margin: const EdgeInsets.only(right: 16),

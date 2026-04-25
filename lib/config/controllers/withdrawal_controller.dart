@@ -33,6 +33,7 @@ class WithdrawalController extends ChangeNotifier {
 
   /// User requests withdrawal
   Future<bool> requestWithdrawal(
+    String userId,
     int coinsToWithdraw,
     String paymentMethod,
     String accountTitle,
@@ -54,6 +55,7 @@ class WithdrawalController extends ChangeNotifier {
 
       // Call service
       final success = await _withdrawalService.requestWithdraw(
+        userId,
         coinsToWithdraw,
         paymentMethod,
         accountTitle,
@@ -62,8 +64,7 @@ class WithdrawalController extends ChangeNotifier {
 
       if (success) {
         _errorMessage = null;
-      } else {
-        _errorMessage = 'Withdrawal request failed. Please try again.';
+        // Optionally refresh history after success
       }
 
       _isLoading = false;
@@ -203,8 +204,8 @@ class WithdrawalController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Fetch withdrawal history from service if implemented
-      // For now, this would need to be added to WithdrawalService
+      _withdrawalHistory =
+          await _withdrawalService.getUserWithdrawalHistory(userId);
       _errorMessage = null;
 
       // Cache the fetched data

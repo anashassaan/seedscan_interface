@@ -539,11 +539,11 @@ class AppwriteService {
         fileId: fileId,
       );
     } catch (e) {
-      debugPrint('[AppwriteService] Error deleting previous profile image: \$e');
+      debugPrint('[AppwriteService] Error deleting previous profile image: $e');
     }
   }
 
   String getProfileImageUrl(String fileId) {
-    return '\$endpoint/storage/buckets/\$profileImagesBucket/files/\$fileId/view?project=\$projectId';
+    return '$endpoint/storage/buckets/$profileImagesBucket/files/$fileId/view?project=$projectId';
   }
 }

@@ -800,13 +800,17 @@ class _TasksScreenState extends State<TasksScreen>
                                   size: 10,
                                   color: cs.onSurface.withOpacity(0.4)),
                               const SizedBox(width: 4),
-                              Text(
-                                  plant?.latitude != null
-                                      ? '${plant!.latitude!.toStringAsFixed(6)}, ${plant.longitude!.toStringAsFixed(6)}'
-                                      : 'No location required',
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      color: cs.onSurface.withOpacity(0.4))),
+                              Flexible(
+                                child: Text(
+                                    plant?.latitude != null
+                                        ? '${plant!.latitude!.toStringAsFixed(6)}, ${plant.longitude!.toStringAsFixed(6)}'
+                                        : 'No location required',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        color: cs.onSurface.withOpacity(0.4)),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                              ),
                             ],
                           ),
                         ],

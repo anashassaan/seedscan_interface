@@ -380,10 +380,14 @@ class ScanController extends ChangeNotifier {
         
         final loc = await getCurrentLocation();
         if (loc != null) {
+          final currentUser = await AppwriteService().getCurrentUser();
+          final userId = currentUser?.$id;
+
           final updatedPlants = await DatabaseService().autoUpdatePlantHealthNearLocation(
             loc.latitude, 
             loc.longitude, 
             _lastDetectionLabel!,
+            userId: userId,
           );
 
           if (updatedPlants.isNotEmpty && context != null && context.mounted) {

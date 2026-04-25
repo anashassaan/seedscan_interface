@@ -12,6 +12,7 @@ class ActivityLog {
   final String proofImageId;
   final String? rejectionReason;
   final String communityId;
+  final String? plantSpecies;
   final DateTime createdAt;
 
   ActivityLog({
@@ -24,6 +25,7 @@ class ActivityLog {
     required this.proofImageId,
     this.rejectionReason,
     this.communityId = '',
+    this.plantSpecies,
     DateTime? createdAt,
   }) : createdAt = createdAt ?? DateTime.now();
 
@@ -38,6 +40,7 @@ class ActivityLog {
       proofImageId: json['proof_image_id'] ?? '',
       rejectionReason: json['rejection_reason'],
       communityId: json['community_id'] ?? '',
+      plantSpecies: json['plant_species'],
       createdAt: json['created_at'] != null || json['\$createdAt'] != null
           ? DateTime.tryParse(json['created_at'] ?? json['\$createdAt'] ?? '')
           : null,
@@ -54,6 +57,7 @@ class ActivityLog {
       'proof_image_id': proofImageId,
       'rejection_reason': rejectionReason,
       'community_id': communityId,
+      'plant_species': plantSpecies,
       'created_at': createdAt.toIso8601String(),
     };
   }

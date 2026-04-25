@@ -4,6 +4,8 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:provider/provider.dart';
 import '../../controllers/wallet_controller.dart';
 import '../../controllers/withdrawal_controller.dart';
+import '../../controllers/auth_controller.dart';
+import '../../../models/withdrawal_model.dart';
 
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
@@ -1164,7 +1166,6 @@ class _WithdrawTab extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 24),
         Text(
           'Select Payment Method',
           style: GoogleFonts.poppins(
@@ -1203,6 +1204,192 @@ class _WithdrawTab extends StatelessWidget {
         ),
 
         const SizedBox(height: 24),
+        const SizedBox(height: 32),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Recent Requests',
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            Consumer<WithdrawalController>(
+              builder: (context, controller, _) {
+                final auth = Provider.of<AuthController>(context, listen: false);
+                return TextButton.icon(
+                  onPressed: controller.isLoading
+                      ? null
+                      : () => controller
+                          .fetchUserWithdrawalHistory(auth.userId ?? ''),
+                  icon: const Icon(LucideIcons.refreshCw, size: 16),
+                  label: const Text('Refresh'),
+                );
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        Consumer<WithdrawalController>(
+          builder: (context, withdrawalController, _) {
+            final history = withdrawalController.withdrawalHistory;
+
+            if (withdrawalController.isLoading && history.isEmpty) {
+              return const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(20),
+                  child: CircularProgressIndicator(),
+                ),
+              );
+            }
+
+            if (history.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  children: [
+                    Icon(LucideIcons.history,
+                        color: Colors.grey.shade400, size: 32),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No withdrawal requests yet',
+                      style: GoogleFonts.poppins(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: history.length,
+              itemBuilder: (context, index) {
+                final request = history[index];
+                Color statusColor = Colors.grey;
+                IconData statusIcon = LucideIcons.helpCircle;
+
+                switch (request.status) {
+                  case WithdrawalStatus.pending:
+                    statusColor = Colors.orange;
+                    statusIcon = LucideIcons.clock;
+                    break;
+                  case WithdrawalStatus.approved:
+                  case WithdrawalStatus.completed:
+                    statusColor = Colors.green;
+                    statusIcon = LucideIcons.checkCircle;
+                    break;
+                  case WithdrawalStatus.rejected:
+                    statusColor = Colors.red;
+                    statusIcon = LucideIcons.xCircle;
+                    break;
+                }
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    leading: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(statusIcon, color: statusColor, size: 20),
+                    ),
+                    title: Text(
+                      'PKR ${request.equivalentPKR.toStringAsFixed(0)}',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Via ${request.paymentMethod.name.toUpperCase()}',
+                          style: GoogleFonts.poppins(fontSize: 12),
+                        ),
+                        Text(
+                          '${request.createdAt.day}/${request.createdAt.month}/${request.createdAt.year}',
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            request.status.name.toUpperCase(),
+                            style: GoogleFonts.poppins(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: statusColor,
+                            ),
+                          ),
+                        ),
+                        if (request.adminNote != null &&
+                            request.adminNote!.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Icon(LucideIcons.messageSquare,
+                                size: 14, color: Colors.grey.shade400),
+                          ),
+                      ],
+                    ),
+                    onTap: () {
+                      if (request.adminNote != null &&
+                          request.adminNote!.isNotEmpty) {
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Admin Note'),
+                            content: Text(request.adminNote!),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Close'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                );
+              },
+            );
+          },
+        ),
+
+        const SizedBox(height: 32),
 
         // Withdrawal Info
         Container(
@@ -1713,8 +1900,11 @@ class _WithdrawMethodCard extends StatelessWidget {
                         }
 
                         // Call the withdrawal service
+                        final auth =
+                            Provider.of<AuthController>(context, listen: false);
                         final success =
                             await withdrawalController.requestWithdrawal(
+                          auth.userId ?? '',
                           coins,
                           paymentMethod,
                           accountTitleController.text,
@@ -1722,6 +1912,12 @@ class _WithdrawMethodCard extends StatelessWidget {
                         );
 
                         if (success) {
+                          // Deduct points locally and in DB
+                          await walletController.spendPoints(
+                            coins,
+                            'Withdrawal request (via ${paymentMethod.toUpperCase()})',
+                          );
+
                           Navigator.pop(context);
 
                           final pkrAmount =

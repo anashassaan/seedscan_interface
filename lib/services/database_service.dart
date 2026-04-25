@@ -220,6 +220,7 @@ class DatabaseService {
     required String proofImageId,
     String? rejectionReason,
     String? communityId,
+    String? plantSpecies,
   }) async {
     final doc = await _appwrite.createDocument(
       collectionId: AppwriteConstants.activityLogsCollection,
@@ -233,6 +234,7 @@ class DatabaseService {
         'proof_image_id': proofImageId,
         'created_at': DateTime.now().toIso8601String(),
         'rejection_reason': rejectionReason ?? '',
+        'plant_species': plantSpecies ?? '',
       },
     );
     return ActivityLog.fromJson(doc.data);
@@ -1271,8 +1273,7 @@ class DatabaseService {
     } catch (e) {
       debugPrint('DB: resolveCanonicalPlantId mapping failed: $e');
     }
-
-    // Default to the source ID if no canonical match found
+  // Default to the source ID if no canonical match found
     return localGardenId;
   }
   // ---------------------------------------------------------------------------
@@ -1280,21 +1281,25 @@ class DatabaseService {
   // ---------------------------------------------------------------------------
 
   /// Automatically updates plant statuses if they match the given user location within 1 meter.
+  /// Also logs a "Health Report" (ActivityLog) for each update to sync with the admin panel.
   /// Returns a list of maps describing the updated plants for UI notification.
   Future<List<Map<String, String>>> autoUpdatePlantHealthNearLocation(
-      double lat, double lng, String diseaseLabel) async {
+      double lat, double lng, String diseaseLabel, {String? userId}) async {
     final updatedPlants = <Map<String, String>>[];
     const double radiusMeters = 1.0; // 1 meter threshold
 
     try {
       final isHealthy = diseaseLabel.toLowerCase() == 'healthy';
       final newStatus = isHealthy ? 'healthy' : 'diseased';
-      final newNotesAppend = isHealthy ? 'Healthy' : 'Disease Detected: $diseaseLabel';
+      final newNotesAppend =
+          isHealthy ? 'Healthy' : 'Disease Detected: $diseaseLabel';
 
       // 1. Check Personal/My Garden (my_garden_qr_codes)
       final myGardenPlantsResponse = await _appwrite.getDocuments(
         collectionId: AppwriteConstants.myGardenQrCollection,
-        queries: [Query.limit(1000)], // Retrieve plenty (Appwrite max might be 5k)
+        queries: [
+          Query.limit(1000)
+        ], // Retrieve plenty (Appwrite max might be 5k)
       );
 
       for (var doc in myGardenPlantsResponse.documents) {
@@ -1303,12 +1308,11 @@ class DatabaseService {
 
         final dist = Geolocator.distanceBetween(
             lat, lng, plant.locationLat, plant.locationLong);
-            
+
         if (dist <= radiusMeters) {
           // Update notes
           final currentNotes = plant.notes;
-          final updatedNotes =
-              '$newNotesAppend. Context: $currentNotes'.trim();
+          final updatedNotes = '$newNotesAppend. Context: $currentNotes'.trim();
 
           await _appwrite.updateDocument(
             collectionId: AppwriteConstants.myGardenQrCollection,
@@ -1316,8 +1320,28 @@ class DatabaseService {
             data: {'notes': updatedNotes},
           );
 
+          // ── SYNC WITH HEALTH REPORTS (Admin Panel) ──
+          if (userId != null && userId.isNotEmpty) {
+            try {
+              await createActivityLog(
+                userId: userId,
+                plantId: plant.id,
+                communityId: 'Personal',
+                plantSpecies:
+                    plant.plantName.isNotEmpty ? plant.plantName : plant.category,
+                actionType: 'scan_disease', // Shows as Health Scan in Admin
+                coinsAwarded: 2, // Small reward for auto-discovery
+                verificationStatus: 'verified',
+                proofImageId: 'geo_match', // Sentinel for location-based updates
+              );
+            } catch (e) {
+              debugPrint('Failed to log health report for personal plant: $e');
+            }
+          }
+
           updatedPlants.add({
-            'name': plant.plantName.isNotEmpty ? plant.plantName : plant.category,
+            'name':
+                plant.plantName.isNotEmpty ? plant.plantName : plant.category,
             'type': plant.category.isNotEmpty ? plant.category : 'Plant',
             'community': 'My Garden',
             'status': newNotesAppend,
@@ -1337,7 +1361,7 @@ class DatabaseService {
 
         final dist = Geolocator.distanceBetween(
             lat, lng, plant.locationLat, plant.locationLong);
-            
+
         if (dist <= radiusMeters) {
           await _appwrite.updateDocument(
             collectionId: AppwriteConstants.plantsCollection,
@@ -1345,10 +1369,30 @@ class DatabaseService {
             data: {'health_status': newStatus},
           );
 
+          // ── SYNC WITH HEALTH REPORTS (Admin Panel) ──
+          if (userId != null && userId.isNotEmpty) {
+            try {
+              await createActivityLog(
+                userId: userId,
+                plantId: plant.id,
+                communityId: plant.driveId,
+                plantSpecies: plant.species,
+                actionType: 'scan_disease', // Shows as Health Scan in Admin
+                coinsAwarded: 5, // Community plants get higher reward
+                verificationStatus: 'verified',
+                proofImageId: 'geo_match',
+              );
+            } catch (e) {
+              debugPrint('Failed to log health report for community plant: $e');
+            }
+          }
+
           updatedPlants.add({
             'name': plant.species.isNotEmpty ? plant.species : 'Unknown',
             'type': 'Community Plant',
-            'community': plant.driveId?.isNotEmpty == true ? plant.driveId! : 'Unknown Community',
+            'community': plant.driveId?.isNotEmpty == true
+                ? plant.driveId!
+                : 'Unknown Community',
             'status': newStatus,
           });
         }

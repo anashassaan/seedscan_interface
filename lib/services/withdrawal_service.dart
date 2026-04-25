@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:appwrite/appwrite.dart';
 import '../config/appwrite_constants.dart';
 import '../models/withdrawal_model.dart';
@@ -12,37 +13,67 @@ class WithdrawalService {
         _databases = AppwriteService().databases;
 
   /// User requests a withdrawal via Appwrite Cloud Function
+  /// Fallback: If function is missing (404), create document directly
   Future<bool> requestWithdraw(
+    String userId,
     int coinsToWithdraw,
     String paymentMethod,
     String accountTitle,
     String accountNo,
   ) async {
-    try {
-      if (coinsToWithdraw < 5000) {
-        throw Exception('Minimum 5000 coins required');
-      }
+    if (coinsToWithdraw < 5000) {
+      throw Exception('Minimum 5000 coins required');
+    }
 
+    final bodyMap = {
+      "requested_coins": coinsToWithdraw,
+      "payment_method": paymentMethod,
+      "account_title": accountTitle,
+      "account_number": accountNo,
+      "user_id": userId, // Include userId for manual fallback
+    };
+
+    try {
       final execution = await _functions.createExecution(
         functionId: AppwriteConstants.requestWithdrawalFunctionId,
-        body: '''
-        {
-          "requested_coins": $coinsToWithdraw,
-          "payment_method": "$paymentMethod",
-          "account_title": "$accountTitle",
-          "account_number": "$accountNo"
-        }
-        ''',
+        body: jsonEncode(bodyMap),
       );
 
       if (execution.status == 'completed') {
         return true;
       } else {
-        throw Exception('Withdrawal failed: \${execution.responseBody}');
+        final errorMsg = execution.responseBody.isNotEmpty
+            ? execution.responseBody
+            : 'Status: ${execution.status}';
+        throw Exception('Withdrawal failed: $errorMsg');
       }
-    } catch (e) {
-      print('Withdrawal Error: \$e');
-      return false;
+    } on AppwriteException catch (ae) {
+      // FALLBACK: If function is not found (404), create document directly
+      if (ae.code == 404) {
+        print(
+            '[WithdrawalService] Function not found (404), falling back to manual document creation');
+        try {
+          await _databases.createDocument(
+            databaseId: AppwriteConstants.databaseId,
+            collectionId: AppwriteConstants.withdrawalsCollection,
+            documentId: ID.unique(),
+            data: {
+              'user_id': userId,
+              'requested_coins': coinsToWithdraw,
+              'equivalent_pkr': coinsToWithdraw / 10,
+              'payment_method': paymentMethod,
+              'account_title': accountTitle,
+              'account_number': accountNo,
+              'status': 'pending',
+              'created_at': DateTime.now().toIso8601String(),
+            },
+          );
+          return true;
+        } catch (e) {
+          throw Exception('Manual withdrawal failed: $e');
+        }
+      }
+      rethrow;
     }
   }
 
@@ -54,8 +85,7 @@ class WithdrawalService {
         collectionId: AppwriteConstants.withdrawalsCollection,
         queries: [
           Query.equal('status', 'pending'),
-          // Assuming owner_id ties to community admin
-          Query.equal('owner_id', adminId),
+          Query.orderDesc('created_at'),
         ],
       );
       return res.documents.map((d) => WithdrawalModel.fromMap(d.data)).toList();

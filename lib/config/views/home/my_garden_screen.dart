@@ -152,33 +152,8 @@ class _MyGardenScreenState extends State<MyGardenScreen>
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final scanController = Provider.of<ScanController>(context);
-    final communityController = Provider.of<CommunityController>(context);
     final auth = Provider.of<AuthController>(context);
-    
-    // Merge personal plants and community plants
-    final List<PlantModel> personalPlants = scanController.getMyPlants();
-    final List<PlantModel> unifiedPlants = List.from(personalPlants);
-    
-    final communityPlants = communityController.getAllCommunityPlants();
-    for (final cp in communityPlants) {
-      if (!unifiedPlants.any((p) => p.id == cp.id)) {
-        unifiedPlants.add(PlantModel(
-          id: cp.id,
-          name: cp.plantName,
-          scientificName: cp.scientificName,
-          image: cp.imageUrl ?? '',
-          status: cp.status,
-          statusColor: cp.statusColor,
-          lastScan: '${cp.plantedDate.day}/${cp.plantedDate.month}/${cp.plantedDate.year}',
-          location: cp.location,
-          driveId: cp.communityId,
-          latitude: cp.latitude,
-          longitude: cp.longitude,
-        ));
-      }
-    }
-    
-    final plants = unifiedPlants;
+    final plants = scanController.getMyPlants();
 
     // Filter plants based on search and filter
     final filteredPlants = plants.where((plant) {

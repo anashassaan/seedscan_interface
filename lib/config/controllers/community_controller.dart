@@ -81,7 +81,7 @@ class CommunityController extends ChangeNotifier {
   Future<void> _syncCommunitiesFromAppwrite(String userId) async {
     try {
       debugPrint(
-          '[CommunityController] Starting background Appwrite sync for user \$userId');
+          '[CommunityController] Starting background Appwrite sync for user $userId');
 
       // 1. Get membership records for this user
       final memberships = await _db.listUserMemberships(userId);
@@ -130,10 +130,10 @@ class CommunityController extends ChangeNotifier {
         }
       }
       debugPrint(
-          '[CommunityController] Background sync complete — \${_communities.length} communities with \${_communityPlants.length} plant caches');
+          '[CommunityController] Background sync complete — ${_communities.length} communities with ${_communityPlants.length} plant caches');
     } catch (e) {
       debugPrint(
-          '[CommunityController] Background Appwrite sync failed (using cached data): \$e');
+          '[CommunityController] Background Appwrite sync failed (using cached data): $e');
     } finally {
       _isLoading = false;
       notifyListeners();
