@@ -92,19 +92,52 @@ class NotificationController extends ChangeNotifier {
     }
   }
 
-  /// Sync notifications from Appwrite in background
+  /// Sync notifications from Appwrite in background.
+  /// IMPORTANT: Merges server state with local in-memory read state so that
+  /// notifications the user has already read in this session are NOT reset to
+  /// unread by the background sync.
   Future<void> _syncFromAppwrite(String userId) async {
     try {
       final list = await _db.listNotifications(userId);
+
+      // Build a lookup of the current in-memory read state so we can preserve
+      // any reads that have happened since this sync started.
+      final localReadState = <String, bool>{
+        for (final n in _notifications) n.id: n.isRead,
+      };
+
       _notifications.clear();
-      _notifications.addAll(list.map(_fromAppwriteNotificationModel).toList());
+      for (final m in list) {
+        final model = _fromAppwriteNotificationModel(m);
+        // Prefer the LOCAL read state (true beats server false — the server
+        // write may still be in-flight when we land here).
+        final alreadyReadLocally = localReadState[model.id] ?? false;
+        if (alreadyReadLocally && !model.isRead) {
+          model.isRead = true; // keep the user's local action
+        }
+        _notifications.add(model);
+      }
+
       debugPrint(
           '[NotificationController] Synced ${_notifications.length} notifications from Appwrite');
 
-      // Cache the fetched data
+      // Persist the merged state to cache
+      await _persistToCache(userId);
+    } catch (e) {
+      debugPrint(
+          '[NotificationController] Appwrite sync failed (using cached data): $e');
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Write current in-memory notification state to Hive cache.
+  Future<void> _persistToCache(String userId) async {
+    try {
       final notificationsList = _notifications
           .map((n) => {
-                'id': n.id,
+                '\$id': n.id,
                 'type': _typeToString(n.type),
                 'title': n.title,
                 'body': n.message,
@@ -118,11 +151,7 @@ class NotificationController extends ChangeNotifier {
           .toList();
       await GardenCacheService.cacheNotifications(userId, notificationsList);
     } catch (e) {
-      debugPrint(
-          '[NotificationController] Appwrite sync failed (using cached data): $e');
-    } finally {
-      _loading = false;
-      notifyListeners();
+      debugPrint('[NotificationController] _persistToCache error: $e');
     }
   }
 
@@ -158,6 +187,8 @@ class NotificationController extends ChangeNotifier {
       }
     }
     notifyListeners();
+    // Persist updated read state to cache so it survives app restarts.
+    if (_currentUserId != null) _persistToCache(_currentUserId!);
   }
 
   void markAsRead(String id) {
@@ -166,6 +197,8 @@ class NotificationController extends ChangeNotifier {
       _notifications[index].isRead = true;
       notifyListeners();
       _markReadOnServer(id);
+      // Persist updated read state to cache so it survives app restarts.
+      if (_currentUserId != null) _persistToCache(_currentUserId!);
     }
   }
 
@@ -266,7 +299,8 @@ class NotificationController extends ChangeNotifier {
     }
 
     return NotificationModel(
-      id: data['\$id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      // Support both Appwrite document key ('$id') and legacy cache key ('id')
+      id: data['\$id'] ?? data['id'] ?? DateTime.now().millisecondsSinceEpoch.toString(),
       type: _typeFromString(data['type']),
       title: data['title'] ?? 'SeedScan',
       message: data['body'] ?? '',

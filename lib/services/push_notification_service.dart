@@ -115,6 +115,18 @@ class PushNotificationService {
                 if (rawPayload is! Map) return;
                 final payload = Map<String, dynamic>.from(rawPayload);
 
+                // ── Only process CREATE events ────────────────────────────
+                // Appwrite Realtime fires for ALL mutations: create, update,
+                // delete.  Calling markAsRead() writes is_read=true on the
+                // server → Realtime fires an UPDATE event → without this guard
+                // the notification would be re-inserted as unread.
+                final events = event.events as List? ?? [];
+                final isCreate = events.any((e) =>
+                    e.toString().contains('.documents.*.create') ||
+                    (e.toString().contains('.documents.') &&
+                        e.toString().endsWith('.create')));
+                if (!isCreate) return; // ignore update / delete events
+
                 final recipientId = payload['recipient_id'] ?? '';
                 if (recipientId == userId || recipientId == 'all') {
                   final title = payload['title'] ?? 'SeedScan';
