@@ -1,6 +1,7 @@
 // lib/services/database_service.dart
 import 'package:appwrite/appwrite.dart';
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
 import '../config/appwrite_constants.dart';
 import '../models/user_model.dart';
 import '../models/plant_model.dart';
@@ -1273,5 +1274,89 @@ class DatabaseService {
 
     // Default to the source ID if no canonical match found
     return localGardenId;
+  }
+  // ---------------------------------------------------------------------------
+  // AUTO-UPDATE PLANT HEALTH
+  // ---------------------------------------------------------------------------
+
+  /// Automatically updates plant statuses if they match the given user location within 1 meter.
+  /// Returns a list of maps describing the updated plants for UI notification.
+  Future<List<Map<String, String>>> autoUpdatePlantHealthNearLocation(
+      double lat, double lng, String diseaseLabel) async {
+    final updatedPlants = <Map<String, String>>[];
+    const double radiusMeters = 1.0; // 1 meter threshold
+
+    try {
+      final isHealthy = diseaseLabel.toLowerCase() == 'healthy';
+      final newStatus = isHealthy ? 'healthy' : 'diseased';
+      final newNotesAppend = isHealthy ? 'Healthy' : 'Disease Detected: $diseaseLabel';
+
+      // 1. Check Personal/My Garden (my_garden_qr_codes)
+      final myGardenPlantsResponse = await _appwrite.getDocuments(
+        collectionId: AppwriteConstants.myGardenQrCollection,
+        queries: [Query.limit(1000)], // Retrieve plenty (Appwrite max might be 5k)
+      );
+
+      for (var doc in myGardenPlantsResponse.documents) {
+        final plant = MyGardenQRModel.fromJson(doc.data);
+        if (plant.locationLat == 0.0 && plant.locationLong == 0.0) continue;
+
+        final dist = Geolocator.distanceBetween(
+            lat, lng, plant.locationLat, plant.locationLong);
+            
+        if (dist <= radiusMeters) {
+          // Update notes
+          final currentNotes = plant.notes;
+          final updatedNotes =
+              '$newNotesAppend. Context: $currentNotes'.trim();
+
+          await _appwrite.updateDocument(
+            collectionId: AppwriteConstants.myGardenQrCollection,
+            documentId: plant.id,
+            data: {'notes': updatedNotes},
+          );
+
+          updatedPlants.add({
+            'name': plant.plantName.isNotEmpty ? plant.plantName : plant.category,
+            'type': plant.category.isNotEmpty ? plant.category : 'Plant',
+            'community': 'My Garden',
+            'status': newNotesAppend,
+          });
+        }
+      }
+
+      // 2. Check Community Plants (plants)
+      final communityPlantsResponse = await _appwrite.getDocuments(
+        collectionId: AppwriteConstants.plantsCollection,
+        queries: [Query.limit(1000)],
+      );
+
+      for (var doc in communityPlantsResponse.documents) {
+        final plant = PlantModel.fromJson(doc.data);
+        if (plant.locationLat == 0.0 && plant.locationLong == 0.0) continue;
+
+        final dist = Geolocator.distanceBetween(
+            lat, lng, plant.locationLat, plant.locationLong);
+            
+        if (dist <= radiusMeters) {
+          await _appwrite.updateDocument(
+            collectionId: AppwriteConstants.plantsCollection,
+            documentId: plant.id,
+            data: {'health_status': newStatus},
+          );
+
+          updatedPlants.add({
+            'name': plant.species.isNotEmpty ? plant.species : 'Unknown',
+            'type': 'Community Plant',
+            'community': plant.driveId?.isNotEmpty == true ? plant.driveId! : 'Unknown Community',
+            'status': newStatus,
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Failed to auto-update plant health by location: $e');
+    }
+
+    return updatedPlants;
   }
 }

@@ -353,12 +353,16 @@ class _CommunityPlantsViewState extends State<CommunityPlantsView> {
             color: cs.onSurface.withOpacity(0.7),
           ),
         ),
-        Text(
-          value,
-          style: GoogleFonts.inter(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: cs.onSurface,
+        Expanded(
+          child: Text(
+            value,
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: cs.onSurface,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -454,21 +458,26 @@ class _CommunityPlantCard extends StatelessWidget {
                           ],
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: plant.statusColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          plant.status,
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: plant.statusColor,
+                      Flexible(
+                        fit: FlexFit.loose,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: plant.statusColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            plant.status,
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: plant.statusColor,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ),
@@ -626,12 +635,16 @@ class _CommunityPlantCard extends StatelessWidget {
                                   color: plant.statusColor,
                                 ),
                                 const SizedBox(width: 8),
-                                Text(
-                                  plant.status,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w600,
-                                    color: plant.statusColor,
+                                Flexible(
+                                  child: Text(
+                                    plant.status,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: plant.statusColor,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               ],
@@ -657,6 +670,8 @@ class _CommunityPlantCard extends StatelessWidget {
                                 color: cs.onPrimaryContainer,
                               ),
                               textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ),
@@ -857,154 +872,355 @@ class _CommunityPlantCard extends StatelessWidget {
         Provider.of<CommunityController>(context, listen: false);
     final scanController = Provider.of<ScanController>(context, listen: false);
 
+    // Declared OUTSIDE the builder so it is never reset on rebuild
+    bool isUpdating = false;
+
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(
-          'Update Location',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Enter a custom location name:',
-              style: GoogleFonts.inter(fontSize: 14),
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: locationController,
-              decoration: InputDecoration(
-                hintText: 'e.g., Near table, In garden, Under tree',
-                hintStyle: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: Colors.grey,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-              ),
-              style: GoogleFonts.inter(fontSize: 14),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'GPS coordinates will be captured automatically',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: Colors.grey,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.inter(),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final locationName = locationController.text.trim();
-              if (locationName.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Please enter a location name',
-                      style: GoogleFonts.poppins(),
-                    ),
-                    backgroundColor: Colors.orange,
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0B6E4F).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                );
-                return;
-              }
-
-              Navigator.pop(dialogContext);
-
-              try {
-                // Use ScanController's helper method to get location with GPS
-                final result =
-                    await scanController.getLocationWithName(locationName);
-
-                if (context.mounted) {
-                  if (result['success']) {
-                    // Update plant location in community
-                    communityController.updatePlantLocation(
-                      communityId,
-                      plant.id,
-                      locationName,
-                      result['latitude'],
-                      result['longitude'],
-                    );
-
-                    // Sync in local scan controller (My Garden)
-                    try {
-                      scanController.syncPlantLocationLocal(
-                        plant.id,
-                        locationName,
-                        result['latitude'] ?? 0.0,
-                        result['longitude'] ?? 0.0,
-                      );
-                    } catch (e) {
-                      debugPrint('Sync to ScanController failed: $e');
-                    }
-
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Location updated successfully!\n$locationName\nLat: ${result['latitude'].toStringAsFixed(4)}, Lng: ${result['longitude'].toStringAsFixed(4)}',
-                          style: GoogleFonts.inter(),
-                        ),
-                        backgroundColor: Colors.green,
-                        duration: const Duration(seconds: 3),
-                      ),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          result['error'] ?? 'Failed to update location',
-                          style: GoogleFonts.inter(),
-                        ),
-                        backgroundColor: Colors.red,
-                        duration: const Duration(seconds: 3),
-                      ),
-                    );
-                  }
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Error: ${e.toString()}',
-                        style: GoogleFonts.inter(),
-                      ),
-                      backgroundColor: Colors.red,
+                  child: const Icon(
+                    Icons.location_on,
+                    color: Color(0xFF0B6E4F),
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Update Location',
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 17,
                     ),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0B6E4F),
+                  ),
+                ),
+              ],
             ),
-            child: Text(
-              'Update',
-              style: GoogleFonts.inter(),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Enter a name for this location:',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: Colors.grey[700],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: locationController,
+                  enabled: !isUpdating,
+                  decoration: InputDecoration(
+                    hintText: 'e.g., Near table, In garden, Under tree',
+                    hintStyle: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: Colors.grey,
+                    ),
+                    prefixIcon: const Icon(Icons.edit_location_alt,
+                        color: Color(0xFF0B6E4F)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: Color(0xFF0B6E4F),
+                        width: 2,
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  style: GoogleFonts.inter(fontSize: 14),
+                ),
+                const SizedBox(height: 10),
+                // FIX: Flexible prevents overflow of long GPS hint text
+                Row(
+                  children: [
+                    const Icon(Icons.gps_fixed, size: 14, color: Colors.grey),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'GPS coordinates captured automatically',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: Colors.grey,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                // Loading status line shown while spinner is active
+                if (isUpdating) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFF0B6E4F),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          'Fetching GPS & saving…',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: const Color(0xFF0B6E4F),
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed:
+                    isUpdating ? null : () => Navigator.pop(dialogContext),
+                child: Text(
+                  'Cancel',
+                  style: GoogleFonts.inter(color: Colors.grey[600]),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: isUpdating
+                    ? null
+                    : () async {
+                        final locationName = locationController.text.trim();
+                        if (locationName.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Row(
+                                children: [
+                                  const Icon(Icons.warning_amber_rounded,
+                                      color: Colors.white, size: 20),
+                                  const SizedBox(width: 10),
+                                  Flexible(
+                                    child: Text(
+                                      'Please enter a location name',
+                                      style: GoogleFonts.inter(
+                                          color: Colors.white),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              backgroundColor: Colors.orange.shade700,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        // Mark as loading — triggers spinner in button + status line
+                        setState(() => isUpdating = true);
+
+                        try {
+                          final result = await scanController
+                              .getLocationWithName(locationName);
+
+                          if (ctx.mounted) {
+                            if (result['success'] == true) {
+                              // Write to DB (both collections)
+                              await communityController.updatePlantLocation(
+                                communityId,
+                                plant.id,
+                                locationName,
+                                (result['latitude'] as num).toDouble(),
+                                (result['longitude'] as num).toDouble(),
+                              );
+
+                              // Sync in-memory for My Garden tab
+                              try {
+                                scanController.syncPlantLocationLocal(
+                                  plant.id,
+                                  locationName,
+                                  (result['latitude'] as num).toDouble(),
+                                  (result['longitude'] as num).toDouble(),
+                                );
+                              } catch (e) {
+                                debugPrint('ScanController sync failed: $e');
+                              }
+
+                              // Close dialog then show rich success SnackBar
+                              if (ctx.mounted) {
+                                Navigator.pop(dialogContext);
+                              }
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(6),
+                                          decoration: const BoxDecoration(
+                                            color: Colors.white24,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.check_circle,
+                                            color: Colors.white,
+                                            size: 22,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                'Location Updated!',
+                                                style: GoogleFonts.poppins(
+                                                  fontWeight: FontWeight.w700,
+                                                  color: Colors.white,
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                              Text(
+                                                '$locationName  •  ${(result['latitude'] as num).toStringAsFixed(4)}, ${(result['longitude'] as num).toStringAsFixed(4)}',
+                                                style: GoogleFonts.inter(
+                                                  color: Colors.white70,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    backgroundColor: const Color(0xFF0B6E4F),
+                                    duration: const Duration(seconds: 4),
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                );
+                              }
+                            } else {
+                              // GPS failed — reset button so user can retry
+                              setState(() => isUpdating = false);
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Row(
+                                      children: [
+                                        const Icon(Icons.location_off,
+                                            color: Colors.white, size: 20),
+                                        const SizedBox(width: 10),
+                                        Flexible(
+                                          child: Text(
+                                            result['error'] ??
+                                                'Failed to get GPS location',
+                                            style: GoogleFonts.inter(
+                                                color: Colors.white),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    backgroundColor: Colors.red.shade700,
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                );
+                              }
+                            }
+                          }
+                        } catch (e) {
+                          if (ctx.mounted) {
+                            setState(() => isUpdating = false);
+                          }
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Error: ${e.toString()}',
+                                  style:
+                                      GoogleFonts.inter(color: Colors.white),
+                                ),
+                                backgroundColor: Colors.red.shade700,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0B6E4F),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor:
+                      const Color(0xFF0B6E4F).withOpacity(0.6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: isUpdating
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : Text(
+                        'Update',
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          fontSize: 15,
+                        ),
+                      ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
+
+
+
+
+
 
   void _showImageSourcePicker(BuildContext context, CommunityPlant plant) {
     final communityController =

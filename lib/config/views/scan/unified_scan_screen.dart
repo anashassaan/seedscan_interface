@@ -191,15 +191,24 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
 
     try {
       final result = await diagnosisService.predict(imageFile);
+      final detectedDisease = result['disease'] as String?;
 
       if (mounted) {
         setState(() {
           classificationResult = result['result'];
-          diseaseName = result['disease'];
+          diseaseName = detectedDisease;
           confidenceLevel = (result['confidence'] as num?)?.toDouble() ?? 0.0;
           severityLevel = result['severity'];
           isLoading = false;
         });
+      }
+
+      // Auto-update nearby plant health in Appwrite based on GPS location
+      if (detectedDisease != null &&
+          detectedDisease != 'N/A' &&
+          detectedDisease != 'Unknown' &&
+          mounted) {
+        _triggerGeoHealthUpdate(detectedDisease);
       }
     } catch (e) {
       if (mounted) {
@@ -208,6 +217,40 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
           classificationResult = 'Error: $e';
         });
       }
+    }
+  }
+
+  /// Gets current GPS location and updates nearby plant health status in DB.
+  /// Shows a SnackBar listing all updated plants.
+  Future<void> _triggerGeoHealthUpdate(String diseaseLabel) async {
+    try {
+      final scanCtrl = Provider.of<ScanController>(context, listen: false);
+      final position = await scanCtrl.getCurrentLocation();
+      if (position == null) return;
+
+      final updatedPlants = await DatabaseService()
+          .autoUpdatePlantHealthNearLocation(
+              position.latitude, position.longitude, diseaseLabel);
+
+      if (updatedPlants.isNotEmpty && mounted) {
+        final message = updatedPlants
+            .map((p) =>
+                "${p['name']} (${p['type']}) in ${p['community']}\nStatus → ${p['status']}")
+            .join('\n─────────────\n');
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🌿 Plant Health Updated:\n$message'),
+            backgroundColor: diseaseLabel.toLowerCase() == 'healthy'
+                ? Colors.green.shade700
+                : Colors.orange.shade800,
+            duration: const Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[UnifiedScan] Geo health update failed: $e');
     }
   }
 
@@ -295,15 +338,24 @@ class _UnifiedScanScreenState extends State<UnifiedScanScreen>
     try {
       // PRESERVED - calling existing model prediction
       final result = await diagnosisService.predict(File(image.path));
+      final detectedDisease = result['disease'] as String?;
 
       if (mounted) {
         setState(() {
           classificationResult = result['result'];
-          diseaseName = result['disease'];
+          diseaseName = detectedDisease;
           confidenceLevel = (result['confidence'] as num?)?.toDouble() ?? 0.0;
           severityLevel = result['severity'];
           isLoading = false;
         });
+      }
+
+      // Auto-update nearby plant health in Appwrite based on GPS location
+      if (detectedDisease != null &&
+          detectedDisease != 'N/A' &&
+          detectedDisease != 'Unknown' &&
+          mounted) {
+        _triggerGeoHealthUpdate(detectedDisease);
       }
     } catch (e) {
       if (mounted) {

@@ -324,7 +324,7 @@ class ScanController extends ChangeNotifier {
   }
 
   // Analyze an image for disease using real TFLite models.
-  Future<void> analyzeImageForDisease({Uint8List? imageBytes}) async {
+  Future<void> analyzeImageForDisease({Uint8List? imageBytes, BuildContext? context}) async {
     if (_isProcessing) return;
     _isProcessing = true;
     _lastDetectionLabel = null;
@@ -370,6 +370,37 @@ class ScanController extends ChangeNotifier {
       _lastDetectionLabel = result['disease'] as String?;
       _lastDetectionConfidence = (result['confidence'] as num?)?.toDouble();
       _lastScanTime = DateTime.now();
+
+      // Stage 3: Auto-update nearby plants via Geolocation
+      if (_lastDetectionLabel != null && 
+          _lastDetectionLabel != 'Analysis error' && 
+          _lastDetectionLabel != 'Not an Apple Leaf' &&
+          _lastDetectionLabel != 'No image provided' &&
+          _lastDetectionLabel != 'Could not decode image') {
+        
+        final loc = await getCurrentLocation();
+        if (loc != null) {
+          final updatedPlants = await DatabaseService().autoUpdatePlantHealthNearLocation(
+            loc.latitude, 
+            loc.longitude, 
+            _lastDetectionLabel!,
+          );
+
+          if (updatedPlants.isNotEmpty && context != null && context.mounted) {
+            final snackBarMessage = updatedPlants.map((p) => 
+               "${p['name']} (${p['type']}) in ${p['community']} -> ${p['status']}"
+            ).join('\n');
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(snackBarMessage),
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+        }
+      }
+
     } catch (e) {
       debugPrint('Disease analysis error: $e');
       _lastDetectionLabel = 'Analysis error';
@@ -522,15 +553,27 @@ class ScanController extends ChangeNotifier {
             'Updated plant $plantId location: ${position.latitude}, ${position.longitude}');
         notifyListeners();
 
-        // Update database asynchronously
+        // Update database — try BOTH collections because the plant can live in
+        // the `plants` collection (community) OR `my_garden_qr_codes` (personal).
         try {
           await DatabaseService().updatePlant(plantId, {
             'location_lat': position.latitude,
             'location_long': position.longitude,
           });
-          print('Synced updated location to DB for $plantId');
+          print('Synced updated location to plants collection for $plantId');
         } catch (dbErr) {
-          print('Failed to sync location to DB for $plantId: $dbErr');
+          print('Failed to sync location to plants collection for $plantId: $dbErr');
+        }
+
+        try {
+          await DatabaseService().updateMyGardenPlantLocation(
+            docId: plantId,
+            lat: position.latitude,
+            lng: position.longitude,
+          );
+          print('Synced updated location to my_garden_qr_codes for $plantId');
+        } catch (dbErr) {
+          print('Failed to sync location to my_garden_qr_codes for $plantId: $dbErr');
         }
       }
 

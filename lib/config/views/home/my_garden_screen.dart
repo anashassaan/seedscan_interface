@@ -568,21 +568,26 @@ class _MyGardenScreenState extends State<MyGardenScreen>
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: plant.statusColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            plant.status,
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: plant.statusColor,
+                        Flexible(
+                          fit: FlexFit.loose,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: plant.statusColor.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              plant.status,
+                              style: GoogleFonts.poppins(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: plant.statusColor,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ),
@@ -1510,35 +1515,42 @@ class _MyGardenScreenState extends State<MyGardenScreen>
                   // Status Badge
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: plant.statusColor.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              plant.status == 'Healthy'
-                                  ? LucideIcons.checkCircle
-                                  : LucideIcons.alertCircle,
-                              size: 16,
-                              color: plant.statusColor,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              plant.status,
-                              style: GoogleFonts.poppins(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
+                      Flexible(
+                        fit: FlexFit.loose,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: plant.statusColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                plant.status == 'Healthy'
+                                    ? LucideIcons.checkCircle
+                                    : LucideIcons.alertCircle,
+                                size: 16,
                                 color: plant.statusColor,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  plant.status,
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: plant.statusColor,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
@@ -1672,91 +1684,205 @@ class _MyGardenScreenState extends State<MyGardenScreen>
                     ),
                   ),
                   const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final scanController = Provider.of<ScanController>(
-                        context,
-                        listen: false,
-                      );
+                  // isLocationUpdating is declared outside the StatefulBuilder
+                  // so it is never reset by a rebuild.
+                  (() {
+                    bool isLocationUpdating = false;
+                    return StatefulBuilder(
+                      builder: (btnCtx, setBtnState) {
+                        return ElevatedButton.icon(
+                          onPressed: isLocationUpdating
+                              ? null
+                              : () async {
+                                  final scanController =
+                                      Provider.of<ScanController>(
+                                    context,
+                                    listen: false,
+                                  );
 
-                      try {
-                        final result =
-                            await scanController.updatePlantLocation(plant.id);
+                                  setBtnState(
+                                      () => isLocationUpdating = true);
 
-                        if (context.mounted) {
-                          if (result['success']) {
-                            try {
-                              Provider.of<CommunityController>(context,
-                                      listen: false)
-                                  .syncPlantLocationLocal(
-                                plant.id,
-                                'Updated Location',
-                                result['latitude'] ?? 0.0,
-                                result['longitude'] ?? 0.0,
-                              );
-                            } catch (e) {
-                              debugPrint(
-                                  'Sync to CommunityController failed: $e');
-                            }
+                                  try {
+                                    final result = await scanController
+                                        .updatePlantLocation(plant.id);
 
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Location updated successfully!\nLat: ${result['latitude'].toStringAsFixed(4)}, Lng: ${result['longitude'].toStringAsFixed(4)}',
-                                  style: GoogleFonts.poppins(),
-                                ),
-                                backgroundColor: Colors.green,
-                                duration: const Duration(seconds: 3),
-                              ),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  result['error'] ??
-                                      'Failed to update location',
-                                  style: GoogleFonts.poppins(),
-                                ),
-                                backgroundColor: Colors.red,
-                                duration: const Duration(seconds: 3),
-                              ),
-                            );
-                          }
+                                    if (context.mounted) {
+                                      if (result['success'] == true) {
+                                        // Sync community in-memory state
+                                        try {
+                                          Provider.of<CommunityController>(
+                                                  context,
+                                                  listen: false)
+                                              .syncPlantLocationLocal(
+                                            plant.id,
+                                            'Updated Location',
+                                            (result['latitude'] as num)
+                                                .toDouble(),
+                                            (result['longitude'] as num)
+                                                .toDouble(),
+                                          );
+                                        } catch (e) {
+                                          debugPrint(
+                                              'Sync to CommunityController failed: $e');
+                                        }
 
-                          // Close modal after showing snackbar
-                          await Future.delayed(
-                              const Duration(milliseconds: 300));
-                          if (context.mounted) {
-                            Navigator.pop(context);
-                          }
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Error: ${e.toString()}',
-                                style: GoogleFonts.poppins(),
-                              ),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
+                                        // Close modal then show rich SnackBar
+                                        Navigator.pop(context);
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Row(
+                                              children: [
+                                                Container(
+                                                  padding:
+                                                      const EdgeInsets.all(6),
+                                                  decoration:
+                                                      const BoxDecoration(
+                                                    color: Colors.white24,
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                  child: const Icon(
+                                                    Icons.check_circle,
+                                                    color: Colors.white,
+                                                    size: 22,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 12),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Text(
+                                                        'Location Updated!',
+                                                        style:
+                                                            GoogleFonts.poppins(
+                                                          fontWeight:
+                                                              FontWeight.w700,
+                                                          color: Colors.white,
+                                                          fontSize: 14,
+                                                        ),
+                                                      ),
+                                                      Text(
+                                                        'Lat: ${(result['latitude'] as num).toStringAsFixed(4)},  Lng: ${(result['longitude'] as num).toStringAsFixed(4)}',
+                                                        style:
+                                                            GoogleFonts.inter(
+                                                          color:
+                                                              Colors.white70,
+                                                          fontSize: 12,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            backgroundColor:
+                                                const Color(0xFF0B6E4F),
+                                            duration:
+                                                const Duration(seconds: 4),
+                                            behavior:
+                                                SnackBarBehavior.floating,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(14),
+                                            ),
+                                          ),
+                                        );
+                                      } else {
+                                        setBtnState(
+                                            () => isLocationUpdating = false);
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Row(
+                                              children: [
+                                                const Icon(Icons.location_off,
+                                                    color: Colors.white,
+                                                    size: 20),
+                                                const SizedBox(width: 10),
+                                                Flexible(
+                                                  child: Text(
+                                                    result['error'] ??
+                                                        'Failed to get GPS location',
+                                                    style: GoogleFonts.inter(
+                                                        color: Colors.white),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            backgroundColor:
+                                                Colors.red.shade700,
+                                            behavior:
+                                                SnackBarBehavior.floating,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  } catch (e) {
+                                    if (btnCtx.mounted) {
+                                      setBtnState(
+                                          () => isLocationUpdating = false);
+                                    }
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Error: ${e.toString()}',
+                                            style: GoogleFonts.inter(
+                                                color: Colors.white),
+                                          ),
+                                          backgroundColor: Colors.red.shade700,
+                                          behavior: SnackBarBehavior.floating,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  }
+                                },
+                          icon: isLocationUpdating
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white),
+                                  ),
+                                )
+                              : const Icon(LucideIcons.mapPin),
+                          label: Text(
+                            isLocationUpdating
+                                ? 'Fetching GPS…'
+                                : 'Update Location',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0B6E4F),
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor:
+                                const Color(0xFF0B6E4F).withOpacity(0.6),
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 14),
+                            minimumSize: const Size(double.infinity, 48),
+                          ),
+                        );
+                      },
+                    );
+                  })(),
 
-                          await Future.delayed(
-                              const Duration(milliseconds: 300));
-                          if (context.mounted) {
-                            Navigator.pop(context);
-                          }
-                        }
-                      }
-                    },
-                    icon: const Icon(LucideIcons.mapPin),
-                    label: const Text('Update Location'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      minimumSize: const Size(double.infinity, 48),
-                    ),
-                  ),
                 ],
               ),
             );
@@ -1787,25 +1913,29 @@ class _MyGardenScreenState extends State<MyGardenScreen>
             child: Icon(icon, size: 20, color: cs.primary),
           ),
           const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: cs.onSurface.withOpacity(0.6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    color: cs.onSurface.withOpacity(0.6),
+                  ),
                 ),
-              ),
-              Text(
-                value,
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: cs.onSurface,
+                Text(
+                  value,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: cs.onSurface,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),

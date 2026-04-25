@@ -110,6 +110,6 @@ class ScanView extends StatelessWidget {
     if (image == null) return;
 
     Uint8List bytes = await image.readAsBytes();
-    scan.analyzeImageForDisease(imageBytes: bytes);
+    scan.analyzeImageForDisease(imageBytes: bytes, context: context);
   }
 }

@@ -373,16 +373,35 @@ class CommunityController extends ChangeNotifier {
         notifyListeners();
         _savePlantsToCache(communityId);
 
-        // Synchronize with database
+        // Synchronize with database — try BOTH collections.
+        // Community plants may live in `plants` (admin QR) OR `my_garden_qr_codes` (personal).
+        bool syncedAtLeastOne = false;
+
         try {
           await _db.updatePlant(plantId, {
             if (latitude != null) 'location_lat': latitude,
             if (longitude != null) 'location_long': longitude,
           });
-          debugPrint(
-              'Successfully synced updated location for $plantId to database.');
+          syncedAtLeastOne = true;
+          debugPrint('updatePlantLocation: synced to `plants` for $plantId');
         } catch (e) {
-          debugPrint('Failed to sync location for $plantId to database: $e');
+          debugPrint('updatePlantLocation: `plants` update failed for $plantId: $e');
+        }
+
+        try {
+          await _db.updateMyGardenPlantLocation(
+            docId: plantId,
+            lat: latitude ?? 0.0,
+            lng: longitude ?? 0.0,
+          );
+          syncedAtLeastOne = true;
+          debugPrint('updatePlantLocation: synced to `my_garden_qr_codes` for $plantId');
+        } catch (e) {
+          debugPrint('updatePlantLocation: `my_garden_qr_codes` update failed for $plantId: $e');
+        }
+
+        if (!syncedAtLeastOne) {
+          debugPrint('updatePlantLocation: WARNING — location not persisted to any DB collection for $plantId');
         }
       }
     }
