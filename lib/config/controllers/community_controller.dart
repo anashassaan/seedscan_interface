@@ -190,6 +190,15 @@ class CommunityController extends ChangeNotifier {
     return List.unmodifiable(_communityPlants[communityId] ?? []);
   }
 
+  /// Get all plants across all communities this user belongs to.
+  List<CommunityPlant> getAllCommunityPlants() {
+    final List<CommunityPlant> all = [];
+    for (final plants in _communityPlants.values) {
+      all.addAll(plants);
+    }
+    return all;
+  }
+
   /// Load/refresh all member plants for [communityId].
   /// CACHE-FIRST: Loads from GardenCacheService instantly, then syncs from Appwrite in background.
   /// Only fetches plants belonging to the currently logged-in user.

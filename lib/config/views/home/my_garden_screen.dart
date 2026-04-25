@@ -41,7 +41,11 @@ class _MyGardenScreenState extends State<MyGardenScreen>
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
-        setState(() {});
+        // Synchronize the status filter with the selected tab
+        final tabFilters = ['All', 'Healthy', 'Needs Care', 'All'];
+        setState(() {
+          _selectedFilter = tabFilters[_tabController.index];
+        });
       }
     });
     _loadMyGardenQRCodes();
@@ -148,8 +152,33 @@ class _MyGardenScreenState extends State<MyGardenScreen>
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final scanController = Provider.of<ScanController>(context);
+    final communityController = Provider.of<CommunityController>(context);
     final auth = Provider.of<AuthController>(context);
-    final plants = scanController.getMyPlants();
+    
+    // Merge personal plants and community plants
+    final List<PlantModel> personalPlants = scanController.getMyPlants();
+    final List<PlantModel> unifiedPlants = List.from(personalPlants);
+    
+    final communityPlants = communityController.getAllCommunityPlants();
+    for (final cp in communityPlants) {
+      if (!unifiedPlants.any((p) => p.id == cp.id)) {
+        unifiedPlants.add(PlantModel(
+          id: cp.id,
+          name: cp.plantName,
+          scientificName: cp.scientificName,
+          image: cp.imageUrl ?? '',
+          status: cp.status,
+          statusColor: cp.statusColor,
+          lastScan: '${cp.plantedDate.day}/${cp.plantedDate.month}/${cp.plantedDate.year}',
+          location: cp.location,
+          driveId: cp.communityId,
+          latitude: cp.latitude,
+          longitude: cp.longitude,
+        ));
+      }
+    }
+    
+    final plants = unifiedPlants;
 
     // Filter plants based on search and filter
     final filteredPlants = plants.where((plant) {
@@ -159,16 +188,32 @@ class _MyGardenScreenState extends State<MyGardenScreen>
                   .toLowerCase()
                   .contains(_searchQuery.toLowerCase());
 
-      final matchesFilter =
-          _selectedFilter == 'All' || plant.status == _selectedFilter;
+      bool matchesFilter = _selectedFilter == 'All';
+      final status = plant.status.toLowerCase();
+      
+      if (_selectedFilter == 'Healthy') {
+        matchesFilter = status == 'healthy' || status == 'growing';
+      } else if (_selectedFilter == 'Needs Care') {
+        matchesFilter = status.contains('need') || status.contains('attention') || 
+                        status.contains('care') || status.contains('disease') || 
+                        status.contains('pest') || status.contains('sick');
+      }
 
       return matchesSearch && matchesFilter;
     }).toList();
 
-    // Count plants by status
-    final healthyCount = plants.where((p) => p.status == 'Healthy').length;
-    final needsAttentionCount =
-        plants.where((p) => p.status == 'Needs Water').length;
+    // Count plants by status (Unified groups)
+    final healthyCount = plants.where((p) {
+      final s = p.status.toLowerCase();
+      return s == 'healthy' || s == 'growing';
+    }).length;
+    
+    final needsAttentionCount = plants.where((p) {
+      final s = p.status.toLowerCase();
+      return s.contains('need') || s.contains('attention') || s.contains('care') || 
+             s.contains('disease') || s.contains('pest') || s.contains('sick');
+    }).length;
+    
     final allCount = plants.length;
 
     return Scaffold(
@@ -1420,7 +1465,7 @@ class _MyGardenScreenState extends State<MyGardenScreen>
             children: [
               _filterOption('All', context),
               _filterOption('Healthy', context),
-              _filterOption('Needs Water', context),
+              _filterOption('Needs Care', context),
             ],
           ),
         );

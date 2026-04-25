@@ -468,7 +468,9 @@ class _WateringScreenState extends State<WateringScreen> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
+          builder: (ctx, setDialogState) => AlertDialog(
+          actionsOverflowDirection: VerticalDirection.down,
+          actionsOverflowButtonSpacing: 8,
           title: Row(
             children: [
               Icon(LucideIcons.clipboardCheck, color: cs.primary),
@@ -522,12 +524,14 @@ class _WateringScreenState extends State<WateringScreen> {
                     const Icon(LucideIcons.coins,
                         size: 16, color: Colors.amber),
                     const SizedBox(width: 6),
-                    Text(
-                      'Complete both steps to earn +5 coins:',
-                      style: GoogleFonts.poppins(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: cs.primary,
+                    Expanded(
+                      child: Text(
+                        'Complete both steps to earn +5 coins:',
+                        style: GoogleFonts.poppins(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: cs.primary,
+                        ),
                       ),
                     ),
                   ],
@@ -674,11 +678,13 @@ class _WateringScreenState extends State<WateringScreen> {
                             size: 20,
                           ),
                           const SizedBox(width: 12),
-                          Text(
-                            '2. Photo Proof',
-                            style: GoogleFonts.poppins(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
+                          Expanded(
+                            child: Text(
+                              '2. Photo Proof',
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],

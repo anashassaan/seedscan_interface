@@ -207,7 +207,7 @@ class HomeView extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _plantsPreview(scanController),
+                  _plantsPreview(scanController, communityController),
                 ],
               ),
             ),
@@ -413,9 +413,11 @@ class HomeView extends StatelessWidget {
     );
   }
 
-  // Plants Preview — loaded from Appwrite via ScanController
-  Widget _plantsPreview(ScanController scanController) {
-    if (scanController.isLoadingPlants) {
+   // Plants Preview — loaded from Appwrite via ScanController & CommunityController
+  Widget _plantsPreview(
+      ScanController scanController, CommunityController communityController) {
+    if (scanController.isLoadingPlants ||
+        communityController.isLoadingCommunityPlants) {
       return SizedBox(
         height: 160,
         child: ListView.builder(
@@ -433,9 +435,35 @@ class HomeView extends StatelessWidget {
       );
     }
 
-    final plants = scanController.getMyPlants();
+    // Merge personal plants and community plants
+    final List<PlantModel> unifiedPlants = [];
 
-    if (plants.isEmpty) {
+    // Add personal plants
+    unifiedPlants.addAll(scanController.getMyPlants());
+
+    // Add community plants (converted to PlantModel)
+    final communityPlants = communityController.getAllCommunityPlants();
+    for (final cp in communityPlants) {
+      // Avoid duplicates if a plant happens to be in both (unlikely but safe)
+      if (!unifiedPlants.any((p) => p.id == cp.id)) {
+        unifiedPlants.add(PlantModel(
+          id: cp.id,
+          name: cp.plantName,
+          scientificName: cp.scientificName,
+          image: cp.imageUrl ?? '',
+          status: cp.status,
+          statusColor: cp.statusColor,
+          lastScan:
+              '${cp.plantedDate.day}/${cp.plantedDate.month}/${cp.plantedDate.year}',
+          location: cp.location,
+          driveId: cp.communityId,
+          latitude: cp.latitude,
+          longitude: cp.longitude,
+        ));
+      }
+    }
+
+    if (unifiedPlants.isEmpty) {
       return Container(
         height: 160,
         decoration: BoxDecoration(
@@ -476,9 +504,9 @@ class HomeView extends StatelessWidget {
         height: 160,
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
-          itemCount: plants.length,
+          itemCount: unifiedPlants.length,
           itemBuilder: (context, index) {
-            final plant = plants[index];
+            final plant = unifiedPlants[index];
             return _plantBox(plant.name, plant.status, plant.image,
                 plant.statusColor, plant.lastScan, cardW);
           },
