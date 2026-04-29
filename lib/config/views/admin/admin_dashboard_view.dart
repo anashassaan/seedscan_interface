@@ -18,7 +18,8 @@ import 'admin_tasks_manager_view.dart';
 import 'admin_withdrawals_view.dart';
 
 class AdminDashboardView extends StatefulWidget {
-  final String adminId; // Used to force widget recreation when admin user changes
+  final String
+      adminId; // Used to force widget recreation when admin user changes
 
   const AdminDashboardView({required this.adminId, super.key});
 
@@ -393,75 +394,6 @@ class _HomeTab extends StatelessWidget {
                           ),
                         ),
                       ],
-                    ),
-                    // Plant Health card sits directly under Disease Alerts row
-                    const SizedBox(height: 12),
-                    GestureDetector(
-                      onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) => const DiseaseStatsPage())),
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: cs.surfaceContainerHighest.withOpacity(0.35),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(LucideIcons.heartPulse,
-                                    size: 16, color: cs.primary),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Plant Health Status',
-                                  style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
-                                      color: cs.onSurface),
-                                ),
-                                const Spacer(),
-                                Icon(LucideIcons.chevronRight,
-                                    size: 16,
-                                    color: cs.onSurface.withOpacity(0.4)),
-                              ],
-                            ),
-                            const SizedBox(height: 14),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _healthCard(
-                                    label: 'Healthy',
-                                    value: admin.healthyPlants,
-                                    color: const Color(0xFF0BA360),
-                                    icon: LucideIcons.leaf,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: _healthCard(
-                                    label: 'Diseased',
-                                    value: admin.diseasedPlants,
-                                    color: const Color(0xFFE67E22),
-                                    icon: LucideIcons.bug,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: _healthCard(
-                                    label: 'Dead',
-                                    value: admin.deadPlants,
-                                    color: const Color(0xFFE53935),
-                                    icon: LucideIcons.skull,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
 
                     const SizedBox(height: 28),
